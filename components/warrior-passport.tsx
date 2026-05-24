@@ -20,6 +20,16 @@ import {
   DEMO_FIGHTER_DB_ID,
   DEMO_FIGHTER_DISPLAY_ID,
 } from "@/lib/warrior-constants";
+import { CyberStatTile } from "@/components/cyber-stat-tile";
+
+type StatFocus = "sessions" | "earnings" | "coach" | null;
+
+const STAT_FOCUS_NOTES: Record<Exclude<StatFocus, null>, string> = {
+  sessions:
+    "Каждое нажатие RECORD SESSION = строка в `training_sessions` (1 000 ₽ gross)",
+  earnings: "Сумма `gross_amount` со всех аудированных сессий бойца",
+  coach: "19% удержание платформы · кэш тренеру / Warrior Point",
+};
 
 const SHOWCASE = {
   elo: 1642,
@@ -55,6 +65,8 @@ export function WarriorPassport() {
   >(null);
 
   const [sessionSyncBusy, setSessionSyncBusy] = useState(false);
+
+  const [statFocus, setStatFocus] = useState<StatFocus>(null);
 
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -550,6 +562,112 @@ export function WarriorPassport() {
             Figures mirror Warrior Point withholdings · every sanctioned training
             line subject to nineteen‑percent protocol levy.
           </p>
+        </section>
+
+        {/* Fighter Profile Details — neon stat tiles */}
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-[11px] font-medium uppercase tracking-[0.28em] text-zinc-500">
+              Fighter profile details
+            </h2>
+            <p className="font-[family-name:var(--font-geist-mono)] text-[10px] uppercase tracking-[0.22em] text-zinc-600">
+              Live ledger · {sessionsRecorded} sessions
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
+            <CyberStatTile
+              label="Total Sessions"
+              value={sessionsRecorded}
+              hint="Audited training count"
+              accent="cyan"
+              active={statFocus === "sessions"}
+              onActivate={() =>
+                setStatFocus((s) => (s === "sessions" ? null : "sessions"))
+              }
+              glyph={
+                <svg
+                  viewBox="0 0 16 16"
+                  width="14"
+                  height="14"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  aria-hidden
+                >
+                  <path d="M2 8h2.5l1.5-4 3 8 1.5-4H14" />
+                </svg>
+              }
+            />
+
+            <CyberStatTile
+              label="Career Earnings"
+              value={careerGrossRub}
+              format={(v) => fmt.format(v)}
+              hint="Gross before 19% levy"
+              accent="fuchsia"
+              active={statFocus === "earnings"}
+              onActivate={() =>
+                setStatFocus((s) => (s === "earnings" ? null : "earnings"))
+              }
+              glyph={
+                <svg
+                  viewBox="0 0 16 16"
+                  width="14"
+                  height="14"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  aria-hidden
+                >
+                  <path d="M3 12l4-4 3 3 4-6" />
+                  <path d="M10 5h4v4" />
+                </svg>
+              }
+            />
+
+            <CyberStatTile
+              label="Coach Revenue"
+              value={Math.round(careerCommissionRub)}
+              format={(v) => fmt.format(v)}
+              hint={`${PLATFORM_COMMISSION_PCT}% protocol levy`}
+              accent="amber"
+              active={statFocus === "coach"}
+              onActivate={() =>
+                setStatFocus((s) => (s === "coach" ? null : "coach"))
+              }
+              glyph={
+                <svg
+                  viewBox="0 0 16 16"
+                  width="14"
+                  height="14"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  aria-hidden
+                >
+                  <circle cx="5" cy="5" r="2" />
+                  <circle cx="11" cy="11" r="2" />
+                  <path d="M13 3L3 13" />
+                </svg>
+              }
+            />
+          </div>
+
+          <AnimatePresence mode="popLayout">
+            {statFocus !== null ? (
+              <motion.p
+                key={statFocus}
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                className="rounded-lg border border-white/[0.07] bg-black/55 px-3 py-2 font-[family-name:var(--font-geist-mono)] text-[11px] leading-relaxed text-zinc-400 sm:px-4"
+              >
+                {STAT_FOCUS_NOTES[statFocus]}
+              </motion.p>
+            ) : null}
+          </AnimatePresence>
         </section>
 
         <section className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-950/40 via-black/80 to-black/90 p-5 sm:p-6">

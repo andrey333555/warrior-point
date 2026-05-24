@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS public.training_sessions (
   fighter_id TEXT NOT NULL,
   gross_amount BIGINT NOT NULL,
   commission_pct SMALLINT NOT NULL DEFAULT 19,
-  commission_amount BIGINT NOT NULL,
+  commission BIGINT NOT NULL,
   net_amount BIGINT NOT NULL,
   xp_awarded INTEGER NOT NULL,
   level_before SMALLINT NOT NULL,

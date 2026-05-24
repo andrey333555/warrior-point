@@ -41,7 +41,8 @@ export async function persistWarriorTrainingSession(
       fighter_id: fighterId,
       gross_amount: breakdown.gross,
       commission_pct: breakdown.commissionPct,
-      commission_amount: breakdown.commission,
+      // Column is `commission` in Supabase (renamed away from `commission_amount`).
+      commission: breakdown.commission,
       net_amount: breakdown.net,
       xp_awarded: economics.xpAward,
       level_before: advancement.levelBefore,

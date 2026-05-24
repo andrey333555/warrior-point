@@ -34,7 +34,7 @@ export async function fetchFighterHydration(
       .maybeSingle(),
     client
       .from("training_sessions")
-      .select("gross_amount, commission_amount, net_amount, total_xp_after")
+      .select("gross_amount, commission, net_amount, total_xp_after")
       .eq("fighter_id", fighterDbId),
   ]);
 
@@ -44,7 +44,7 @@ export async function fetchFighterHydration(
 
   for (const row of lines ?? []) {
     careerGrossRub += num(row.gross_amount);
-    careerCommissionRub += num(row.commission_amount);
+    careerCommissionRub += num(row.commission);
     careerNetRub += num(row.net_amount);
   }
 
