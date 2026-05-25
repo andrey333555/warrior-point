@@ -6,6 +6,7 @@ import {
   advanceFighterXp,
   DEMO_SESSION_GROSS_RUB,
   deriveLevel,
+  MAX_LEVEL,
   PLATFORM_COMMISSION_PCT,
   recordTrainingSessionRub,
   xpBracketProgress,
@@ -16,20 +17,27 @@ import {
 import { createWarriorBrowserClient } from "@/lib/supabase/client";
 import { persistWarriorTrainingSession } from "@/lib/supabase/warrior-sync";
 import { fetchFighterHydration } from "@/lib/supabase/read";
+import { isWarriorAdminMode, WARRIOR_WINNER_STATUS } from "@/lib/admin";
+import { AgentsWindow } from "@/components/agents-window";
 import {
   DEMO_FIGHTER_DB_ID,
   DEMO_FIGHTER_DISPLAY_ID,
+  DEMO_FIGHTER_DISPLAY_NAME,
+  DEMO_FIGHTER_INITIALS,
 } from "@/lib/warrior-constants";
 import { CyberStatTile } from "@/components/cyber-stat-tile";
-
-type StatFocus = "sessions" | "earnings" | "coach" | null;
-
-const STAT_FOCUS_NOTES: Record<Exclude<StatFocus, null>, string> = {
-  sessions:
-    "Каждое нажатие RECORD SESSION = строка в `training_sessions` (1 000 ₽ gross)",
-  earnings: "Сумма `gross_amount` со всех аудированных сессий бойца",
-  coach: "19% удержание платформы · кэш тренеру / Warrior Point",
-};
+import { CyberTabs, type CyberTabDef } from "@/components/cyber-tabs";
+import { EloBar } from "@/components/elo-bar";
+import { HexAvatar } from "@/components/hex-avatar";
+import { HexBadge } from "@/components/hex-badge";
+import { HexCluster, type SotkaSlot } from "@/components/hex-cluster";
+import { HexPopover } from "@/components/hex-popover";
+import { XpBar } from "@/components/xp-bar";
+import {
+  RECENT_FIGHTS_MOCK,
+  mockRecordSummary,
+} from "@/lib/mocks/recent-fights";
+import { rankRewardFor } from "@/lib/rank-rewards";
 
 const SHOWCASE = {
   elo: 1642,
@@ -38,6 +46,14 @@ const SHOWCASE = {
 };
 
 type LevelBurst = Pick<FighterAdvancerResult, "levelAfter" | "levelsJumped">;
+
+type TabId = "overview" | "ledger" | "vitals";
+
+const TABS: ReadonlyArray<CyberTabDef<TabId>> = [
+  { id: "overview", label: "Обзор" },
+  { id: "ledger", label: "Леджер" },
+  { id: "vitals", label: "Витальные" },
+];
 
 export function WarriorPassport() {
   const totalXpRef = useRef(0);
@@ -49,6 +65,13 @@ export function WarriorPassport() {
   const [careerNetRub, setCareerNetRub] = useState(0);
 
   const [sessionsRecorded, setSessionsRecorded] = useState(0);
+
+  const [xp30d, setXp30d] = useState(0);
+
+  const [currentStatus, setCurrentStatus] = useState<string | null>(null);
+  const [monthlyWinnerAt, setMonthlyWinnerAt] = useState<string | null>(null);
+  const [adminMode, setAdminMode] = useState(false);
+  const [agentsOpen, setAgentsOpen] = useState(false);
 
   const [remoteBootstrapped, setRemoteBootstrapped] = useState(false);
 
@@ -66,12 +89,30 @@ export function WarriorPassport() {
 
   const [sessionSyncBusy, setSessionSyncBusy] = useState(false);
 
-  const [statFocus, setStatFocus] = useState<StatFocus>(null);
+  const [activeTab, setActiveTab] = useState<TabId>("overview");
+
+  const [hexOpen, setHexOpen] = useState<"record" | "level" | null>(null);
 
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const bracket = xpBracketProgress(totalXp);
   const level = deriveLevel(totalXp);
+
+  /**
+   * Live W/L: wins follow the audited session count (each RECORD SESSION is a win).
+   * Losses come from the mock card until we wire bout outcomes into Supabase.
+   */
+  const liveRecord = (() => {
+    const seed = mockRecordSummary();
+    const losses = seed.losses;
+    const wins = Math.max(seed.wins, sessionsRecorded);
+
+    return { wins, losses };
+  })();
+
+  const rankReward = rankRewardFor(level);
+
+  const isWinner = currentStatus === WARRIOR_WINNER_STATUS;
 
   const fmt = new Intl.NumberFormat("ru-RU", {
     style: "currency",
@@ -82,6 +123,10 @@ export function WarriorPassport() {
   useEffect(() => {
     totalXpRef.current = totalXp;
   }, [totalXp]);
+
+  useEffect(() => {
+    setAdminMode(isWarriorAdminMode());
+  }, []);
 
   useEffect(() => {
     let aborted = false;
@@ -108,6 +153,10 @@ export function WarriorPassport() {
         setCareerNetRub(ledger.careerNetRub);
 
         setSessionsRecorded(ledger.sessionsCount);
+        setXp30d(ledger.xp30d);
+
+        setCurrentStatus(ledger.currentStatus);
+        setMonthlyWinnerAt(ledger.monthlyWinnerAt);
       } catch (error) {
         console.error("[Warrior Point] hydration failed:", error);
       } finally {
@@ -131,6 +180,7 @@ export function WarriorPassport() {
     setCareerCommissionRub((c) => c + economics.breakdown.commission);
     setCareerNetRub((n) => n + economics.breakdown.net);
     setSessionsRecorded((s) => s + 1);
+    setXp30d((x) => x + economics.xpAward);
 
     setLastSession(economics);
 
@@ -179,6 +229,27 @@ export function WarriorPassport() {
     }
   }, []);
 
+  /**
+   * Called by AgentsWindow whenever an admin flips a fighter's `is_winner`.
+   * If it touched the locally-rendered passport (Виктор), we sync the hero
+   * UI immediately so the gold sotka & pill react without a full reload.
+   */
+  const handleAgentsWinnerChange = useCallback(
+    (fighterId: string, nextIsWinner: boolean) => {
+      if (fighterId !== DEMO_FIGHTER_DB_ID) return;
+
+      setCurrentStatus(nextIsWinner ? WARRIOR_WINNER_STATUS : null);
+      setMonthlyWinnerAt(nextIsWinner ? new Date().toISOString() : null);
+      setLedgerEcho({
+        tone: "ok",
+        message: nextIsWinner
+          ? "Winner of the Month · is_winner=true synced"
+          : "Winner status revoked · is_winner=false synced",
+      });
+    },
+    [],
+  );
+
   useEffect(() => {
     if (!ledgerEcho || ledgerEcho.tone !== "ok") return undefined;
 
@@ -203,13 +274,12 @@ export function WarriorPassport() {
     };
   }, [levelBurst]);
 
-  const pctArc = Math.max(2, (level / 23) * 100);
-
   return (
     <div className="min-h-screen bg-black text-zinc-100 font-sans selection:bg-cyan-500/30 selection:text-cyan-50">
+      {/* Cyber-Loft ambient grid */}
       <div
         aria-hidden
-        className="pointer-events-none fixed inset-0 opacity-[0.38]"
+        className="pointer-events-none fixed inset-0 opacity-[0.4]"
         style={{
           backgroundImage: `
             linear-gradient(rgba(34, 211, 238, 0.07) 1px, transparent 1px),
@@ -218,497 +288,805 @@ export function WarriorPassport() {
           backgroundSize: "52px 52px",
         }}
       />
-      <div className="pointer-events-none fixed inset-0 bg-gradient-to-b from-cyan-500/[0.06] via-transparent to-fuchsia-500/[0.06]" />
+      <div className="pointer-events-none fixed inset-0 bg-gradient-to-b from-cyan-500/[0.07] via-transparent to-fuchsia-500/[0.07]" />
 
-      <main className="relative z-10 mx-auto flex min-h-screen max-w-lg flex-col gap-8 px-5 py-10 pb-28 sm:max-w-2xl sm:px-8 sm:py-14 sm:pb-32">
+      <main className="relative z-10 mx-auto flex min-h-screen max-w-lg flex-col gap-6 px-5 py-9 pb-28 sm:max-w-3xl sm:px-8 sm:py-14 sm:pb-28">
         {!remoteBootstrapped ? (
-          <p className="-mb-5 rounded-lg border border-cyan-500/35 bg-black/65 px-3 py-2 text-center font-[family-name:var(--font-geist-mono)] text-[10px] font-semibold uppercase tracking-[0.26em] text-cyan-200/95">
-            Rehydrating sovereign ledger…
+          <p className="-mb-3 rounded-lg border border-cyan-500/35 bg-black/65 px-3 py-2 text-center font-[family-name:var(--font-geist-mono)] text-[10px] font-semibold uppercase tracking-[0.26em] text-cyan-200/95">
+            Подгружаю суверенный леджер…
           </p>
         ) : null}
 
         <AnimatePresence mode="sync">
           {levelBurst !== null ? (
-            <motion.div
-              key="level-veil"
-              className="fixed inset-0 z-40 flex cursor-pointer items-center justify-center bg-black/85 px-6 backdrop-blur-md"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.25 }}
-              onClick={() => setLevelBurst(null)}
-            >
-              <motion.div
-                className="flex max-w-sm flex-col items-center text-center"
-                initial={{ scale: 0.86, rotateX: -6, opacity: 0 }}
-                animate={{ scale: 1, rotateX: 0, opacity: 1 }}
-                exit={{ scale: 0.92, opacity: 0, filter: "blur(14px)" }}
-                transition={{ type: "spring", stiffness: 320, damping: 22 }}
-              >
-                <motion.p
-                  className="font-[family-name:var(--font-geist-mono)] text-xs uppercase tracking-[0.52em] text-cyan-300/95"
-                  initial={{ y: -12, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{
-                    delay: 0.05,
-                    duration: 0.35,
-                    ease: [0.22, 1, 0.36, 1],
-                  }}
-                >
-                  Warrior Point
-                </motion.p>
-
-                <div className="mt-10 flex flex-col items-center gap-1 sm:gap-2">
-                  <motion.span
-                    className="block font-black uppercase tracking-[0.45em] text-white sm:text-xl"
-                    style={{ fontSize: "clamp(2.15rem,7vw,3.25rem)" }}
-                    initial={{ y: 18, opacity: 0, skewX: -6 }}
-                    animate={{ y: 0, opacity: 1, skewX: 0 }}
-                    transition={{
-                      type: "spring",
-                      stiffness: 260,
-                      damping: 14,
-                      delay: 0.12,
-                    }}
-                  >
-                    LEVEL
-                  </motion.span>
-
-                  <motion.span
-                    className="bg-gradient-to-r from-cyan-300 via-white to-fuchsia-300 bg-clip-text font-black uppercase tracking-[0.28em]"
-                    style={{
-                      WebkitBackgroundClip: "text",
-                      fontSize: "clamp(3.4rem,12vw,5.75rem)",
-                      WebkitTextFillColor: "transparent",
-                    }}
-                    initial={{ scale: 0.5, opacity: 0, filter: "blur(22px)" }}
-                    animate={{ scale: 1, opacity: 1, filter: "blur(0px)" }}
-                    transition={{
-                      type: "spring",
-                      stiffness: 410,
-                      damping: 24,
-                      delay: 0.22,
-                    }}
-                  >
-                    UP
-                  </motion.span>
-
-                  <motion.p
-                    className="mt-6 font-[family-name:var(--font-geist-mono)] text-2xl text-zinc-200 sm:text-3xl"
-                    initial={{ y: 10, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    transition={{
-                      delay: 0.42,
-                      duration: 0.35,
-                      ease: [0.22, 1, 0.36, 1],
-                    }}
-                  >
-                    Rank {levelBurst.levelAfter}
-                    <span className="text-zinc-500"> /23</span>
-                  </motion.p>
-
-                  {levelBurst.levelsJumped > 1 ? (
-                    <motion.p
-                      className="mt-2 text-sm uppercase tracking-[0.25em] text-fuchsia-300/95"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: 0.55 }}
-                    >
-                      +{levelBurst.levelsJumped} tier jumps · surge certified
-                    </motion.p>
-                  ) : (
-                    <motion.p
-                      className="mt-2 text-[11px] uppercase tracking-[0.32em] text-zinc-500"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: 0.55 }}
-                    >
-                      Global ladder updated
-                    </motion.p>
-                  )}
-                </div>
-              </motion.div>
-            </motion.div>
+            <LevelUpOverlay
+              levelAfter={levelBurst.levelAfter}
+              levelsJumped={levelBurst.levelsJumped}
+              onDismiss={() => setLevelBurst(null)}
+            />
           ) : null}
         </AnimatePresence>
 
-        <section className="rounded-2xl border border-white/[0.12] bg-gradient-to-br from-zinc-950/95 via-black/85 to-black/90 p-[1px] shadow-[0_0_120px_-30px_rgba(34,211,238,0.35)]">
-          <div className="rounded-[calc(1rem-1px)] bg-gradient-to-br from-white/[0.05] via-transparent to-fuchsia-500/[0.04] p-5 sm:flex sm:flex-wrap sm:items-center sm:justify-between sm:p-7">
-            <div className="mb-5 flex-1 sm:mb-0 sm:mr-10">
-              <p className="text-[11px] font-medium uppercase tracking-[0.3em] text-cyan-400/90">
-                Training ledger sync
-              </p>
-              <p className="mt-3 max-w-xl text-sm leading-relaxed text-zinc-400">
-                Ingest sanctioned session economics: platform fee enforced at{" "}
-                <span className="font-medium text-white">
-                  {PLATFORM_COMMISSION_PCT}%
-                </span>
-                · XP aligns with payout after withholdings.
-              </p>
-              {ledgerEcho ? (
-                <p
-                  role="status"
-                  className={
-                    ledgerEcho.tone === "ok"
-                      ? "mt-4 rounded-lg border border-emerald-400/35 bg-emerald-500/[0.12] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-200"
-                      : "mt-4 rounded-lg border border-amber-500/35 bg-amber-500/[0.1] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-100"
-                  }
-                >
-                  {ledgerEcho.message}
+        <AgentsWindow
+          open={agentsOpen}
+          client={createWarriorBrowserClient()}
+          onClose={() => setAgentsOpen(false)}
+          onWinnerChange={handleAgentsWinnerChange}
+        />
+
+        {/* HERO · identity */}
+        <section className="relative overflow-hidden rounded-3xl border border-white/[0.12] bg-gradient-to-br from-zinc-950/95 via-black/85 to-black/90 p-[1px] shadow-[0_0_120px_-30px_rgba(34,211,238,0.4)]">
+          <div className="rounded-[calc(1.5rem-1px)] bg-gradient-to-br from-white/[0.04] via-transparent to-fuchsia-500/[0.05] px-5 py-6 sm:px-8 sm:py-8">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.42em] text-cyan-300/95">
+              Warrior Passport
+            </p>
+
+            <div className="mt-5 flex flex-col items-center gap-6 sm:flex-row sm:items-center sm:gap-8">
+              <HexCluster
+                centerSize={156}
+                gap={4}
+                center={({ size }) => (
+                  <HexAvatar
+                    initials={DEMO_FIGHTER_INITIALS || "ВК"}
+                    level={level}
+                    maxLevel={MAX_LEVEL}
+                    size={size}
+                    pulse={!remoteBootstrapped || sessionSyncBusy}
+                    showTierBadge={false}
+                  />
+                )}
+                cells={
+                  [
+                    /**
+                     * Core orbit — locked to the right-hand grains of the
+                     * pointy-top core (faces 5 → top-right, 1 → bottom-right).
+                     * Every sotka is `centerSize / φ` so the whole composition
+                     * reads as one piece of jewellery.
+                     */
+                    ...(isWinner
+                      ? ([
+                          {
+                            id: "winner",
+                            face: 4,
+                            render: ({ size }) => (
+                              <HexBadge
+                                accent="gold"
+                                topLabel="Winner"
+                                primary={<span aria-hidden>★</span>}
+                                secondary="of the month"
+                                size={size}
+                              />
+                            ),
+                          },
+                        ] satisfies SotkaSlot[])
+                      : []),
+                    {
+                      id: "level",
+                      face: 5,
+                      render: ({ size }) => (
+                        <div data-hex-trigger>
+                          <HexBadge
+                            accent="pink"
+                            topLabel="Level"
+                            primary={
+                              <span className="tabular-nums">
+                                {String(level).padStart(2, "0")}
+                              </span>
+                            }
+                            secondary={`/ ${MAX_LEVEL}`}
+                            size={size}
+                            onClick={() =>
+                              setHexOpen((s) =>
+                                s === "level" ? null : "level",
+                              )
+                            }
+                            active={hexOpen === "level"}
+                            ariaExpanded={hexOpen === "level"}
+                            ariaControls="hex-popover-level"
+                          />
+                        </div>
+                      ),
+                    },
+                    {
+                      id: "record",
+                      face: 1,
+                      render: ({ size }) => (
+                        <div data-hex-trigger>
+                          <HexBadge
+                            accent="green"
+                            topLabel="Record"
+                            primary={
+                              <span className="tabular-nums">
+                                {liveRecord.wins}
+                                <span className="text-zinc-500">–</span>
+                                {liveRecord.losses}
+                              </span>
+                            }
+                            secondary="W · L"
+                            size={size}
+                            onClick={() =>
+                              setHexOpen((s) =>
+                                s === "record" ? null : "record",
+                              )
+                            }
+                            active={hexOpen === "record"}
+                            ariaExpanded={hexOpen === "record"}
+                            ariaControls="hex-popover-record"
+                          />
+                        </div>
+                      ),
+                    },
+                    /**
+                     * Future slots — Fibonacci / golden-angle spiral around the core.
+                     * Drop in `{ rank: 1, accent: "gold", … }` for first gift, then
+                     * 2, 3, … for streak / boost / VIP perks. The cluster handles
+                     * positioning automatically (Vogel phyllotaxis, 137.508° step).
+                     *
+                     * Example template:
+                     * {
+                     *   id: "gift-1",
+                     *   rank: 1,
+                     *   render: ({ size }) => (
+                     *     <HexBadge
+                     *       accent="gold"
+                     *       topLabel="Gift"
+                     *       primary={<span>◆</span>}
+                     *       secondary="bonus"
+                     *       size={size}
+                     *     />
+                     *   ),
+                     * },
+                     */
+                  ] satisfies SotkaSlot[]
+                }
+              />
+
+              <div className="min-w-0 flex-1 text-center sm:text-left">
+                <p className="text-[10px] uppercase tracking-[0.28em] text-zinc-500">
+                  Combatant
                 </p>
+                <h1 className="mt-2 text-3xl font-semibold leading-tight tracking-tight text-white sm:text-[38px]">
+                  {DEMO_FIGHTER_DISPLAY_NAME}
+                </h1>
+                <p className="mt-2 font-[family-name:var(--font-geist-mono)] text-xs tracking-[0.05em] text-zinc-500 sm:text-sm">
+                  ID · {DEMO_FIGHTER_DISPLAY_ID}
+                </p>
+
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-3 sm:justify-start">
+                  <RankPill level={level} maxLevel={MAX_LEVEL} />
+                  <span className="rounded-full border border-emerald-500/35 bg-emerald-500/10 px-3 py-1 font-[family-name:var(--font-geist-mono)] text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-300">
+                    Sanctioned · Worldwide
+                  </span>
+
+                  <AnimatePresence initial={false}>
+                    {isWinner ? (
+                      <motion.span
+                        key="winner-pill"
+                        initial={{ opacity: 0, y: -4, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -4, scale: 0.95 }}
+                        transition={{
+                          type: "spring",
+                          stiffness: 360,
+                          damping: 24,
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/55 bg-amber-500/[0.1] px-3 py-1 font-[family-name:var(--font-geist-mono)] text-[10px] font-semibold uppercase tracking-[0.22em] text-amber-200 shadow-[0_0_22px_-6px_rgba(250,204,21,0.65)]"
+                        title={
+                          monthlyWinnerAt
+                            ? `Granted ${new Date(monthlyWinnerAt).toLocaleDateString()}`
+                            : undefined
+                        }
+                      >
+                        <GiftGlyph className="h-3 w-3" />
+                        Winner of the Month
+                      </motion.span>
+                    ) : null}
+                  </AnimatePresence>
+
+                  {adminMode ? (
+                    <AdminAgentsTrigger
+                      onClick={() => setAgentsOpen(true)}
+                      pulse={isWinner}
+                    />
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            <AnimatePresence mode="wait">
+              {hexOpen === "record" ? (
+                <motion.div
+                  key="hex-record"
+                  layout
+                  className="mt-6"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                >
+                  <HexPopover
+                    id="hex-popover-record"
+                    accent="green"
+                    eyebrow="Recent bouts · live ledger"
+                    title={`Record · ${liveRecord.wins} − ${liveRecord.losses}`}
+                    onClose={() => setHexOpen(null)}
+                  >
+                    <ul className="space-y-2.5">
+                      {RECENT_FIGHTS_MOCK.map((f) => (
+                        <li
+                          key={f.id}
+                          className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.07] bg-black/55 px-3 py-2.5 sm:px-4 sm:py-3"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate font-[family-name:var(--font-geist-mono)] text-sm font-semibold text-white">
+                              {f.opponent}
+                              <span className="ml-2 text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+                                {f.flag}
+                              </span>
+                            </p>
+                            <p className="mt-1 font-[family-name:var(--font-geist-mono)] text-[11px] uppercase tracking-[0.18em] text-zinc-500">
+                              {f.date} · {f.method}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-3 text-right">
+                            <span
+                              className={`inline-flex h-7 w-7 items-center justify-center rounded-md border font-[family-name:var(--font-geist-mono)] text-[11px] font-bold ${
+                                f.result === "W"
+                                  ? "border-emerald-400/55 bg-emerald-500/[0.15] text-emerald-200"
+                                  : f.result === "L"
+                                  ? "border-amber-400/55 bg-amber-500/[0.12] text-amber-200"
+                                  : "border-white/20 bg-white/[0.05] text-zinc-300"
+                              }`}
+                            >
+                              {f.result}
+                            </span>
+                            <div className="flex flex-col items-end">
+                              <span className="font-[family-name:var(--font-geist-mono)] text-[11px] tabular-nums text-cyan-200">
+                                +{f.xpAwarded} XP
+                              </span>
+                              <span
+                                className={`font-[family-name:var(--font-geist-mono)] text-[10px] tabular-nums ${
+                                  f.eloDelta >= 0
+                                    ? "text-emerald-300"
+                                    : "text-amber-300"
+                                }`}
+                              >
+                                {f.eloDelta >= 0 ? "+" : ""}
+                                {f.eloDelta} ELO
+                              </span>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="mt-4 text-[11px] leading-relaxed text-zinc-500">
+                      Live W растёт автоматически с каждой записью в{" "}
+                      <span className="font-[family-name:var(--font-geist-mono)] text-zinc-300">
+                        training_sessions
+                      </span>
+                      .
+                    </p>
+                  </HexPopover>
+                </motion.div>
               ) : null}
-              {lastSession ? (
-                <LastSessionRibbon
-                  breakdown={lastSession.breakdown}
-                  xpAward={lastSession.xpAward}
+
+              {hexOpen === "level" ? (
+                <motion.div
+                  key="hex-level"
+                  layout
+                  className="mt-6"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                >
+                  <HexPopover
+                    id="hex-popover-level"
+                    accent="pink"
+                    eyebrow={`Tier ${level} / ${MAX_LEVEL}`}
+                    title={`Rank ${level}: ${rankReward.name}`}
+                    onClose={() => setHexOpen(null)}
+                  >
+                    <p className="font-[family-name:var(--font-geist-mono)] text-sm leading-relaxed text-zinc-200 sm:text-base">
+                      {rankReward.perk}
+                      {rankReward.xpBonusPct > 0 ? (
+                        <span className="ml-2 inline-flex items-center rounded-md border border-fuchsia-400/40 bg-fuchsia-500/[0.12] px-2 py-0.5 font-bold tabular-nums text-fuchsia-200">
+                          +{rankReward.xpBonusPct}% XP
+                        </span>
+                      ) : null}
+                    </p>
+                    <p className="mt-4 font-[family-name:var(--font-geist-mono)] text-[11px] leading-relaxed text-zinc-500">
+                      Бонус действует на следующую RECORD SESSION. Прогресс
+                      между гейтами: {Math.round(bracket.pctInLevel * 100)}% ·
+                      следующий ранг откроет ещё больше перков.
+                    </p>
+                  </HexPopover>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
+
+            <div className="mt-7">
+              <XpBar
+                level={bracket.level}
+                maxLevel={MAX_LEVEL}
+                totalXp={totalXp}
+                pctInLevel={bracket.pctInLevel}
+                xpForNext={bracket.xpForNext}
+              />
+            </div>
+
+            <div className="mt-6">
+              <RecordSessionAction
+                onRecord={() => void recordSession()}
+                busy={sessionSyncBusy}
+                disabled={!remoteBootstrapped}
+                fmt={fmt}
+                echo={ledgerEcho}
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* ELO */}
+        <EloBar
+          elo={SHOWCASE.elo}
+          delta30d={SHOWCASE.eloDelta30d}
+          globalPct={SHOWCASE.globalPct}
+        />
+
+        {/* Tabs */}
+        <div className="space-y-5">
+          <CyberTabs<TabId>
+            tabs={TABS}
+            active={activeTab}
+            onChange={setActiveTab}
+          />
+
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              role="tabpanel"
+            >
+              {activeTab === "overview" ? (
+                <OverviewTab
+                  sessionsRecorded={sessionsRecorded}
+                  careerGrossRub={careerGrossRub}
+                  careerCommissionRub={careerCommissionRub}
+                  fmt={fmt}
+                  lastSession={lastSession}
+                />
+              ) : null}
+
+              {activeTab === "ledger" ? (
+                <LedgerTab
+                  careerGrossRub={careerGrossRub}
+                  careerCommissionRub={careerCommissionRub}
+                  careerNetRub={careerNetRub}
                   fmt={fmt}
                 />
               ) : null}
-            </div>
 
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
-              <div className="text-right font-[family-name:var(--font-geist-mono)] text-[11px] uppercase tracking-[0.2em] text-zinc-500">
-                <span className="block text-[10px] text-zinc-600">
-                  Bill per session · demo
-                </span>
-                <span className="mt-2 block text-sm text-white sm:text-lg">
-                  {fmt.format(DEMO_SESSION_GROSS_RUB)}
-                </span>
-              </div>
-              <motion.button
-                type="button"
-                onClick={() => void recordSession()}
-                disabled={sessionSyncBusy || !remoteBootstrapped}
-                aria-busy={sessionSyncBusy || !remoteBootstrapped}
-                className="group relative shrink-0 overflow-hidden rounded-xl border border-cyan-400/55 bg-black/60 px-6 py-3.5 font-[family-name:var(--font-geist-mono)] text-xs font-semibold uppercase tracking-[0.42em] text-cyan-200 shadow-[0_0_32px_-6px_rgba(34,211,238,0.55)] disabled:pointer-events-none disabled:opacity-50 sm:py-4"
-                whileTap={{ scale: sessionSyncBusy ? 1 : 0.98 }}
-                whileHover={{
-                  scale: 1.01,
-                  boxShadow:
-                    "0 0 45px -4px rgba(34,211,238,0.65), inset 0 0 55px rgba(34,211,238,0.08)",
-                  borderColor: "rgba(244,232,212,0.35)",
-                }}
-              >
-                <span className="pointer-events-none absolute inset-0 translate-y-full bg-gradient-to-t from-cyan-500/[0.12] via-transparent opacity-0 transition duration-500 group-hover:translate-y-1/3 group-hover:opacity-100" />
-                {sessionSyncBusy ? "SYNC…" : "RECORD SESSION"}
-              </motion.button>
-            </div>
-          </div>
-        </section>
-
-        <header className="flex flex-col gap-3 border-b border-white/[0.08] pb-6">
-          <p className="text-[11px] font-medium uppercase tracking-[0.35em] text-cyan-400/90">
-            Warrior Passport
-          </p>
-          <p className="text-sm text-zinc-500">
-            Global combat registry · Cross-border credential
-          </p>
-        </header>
-
-        <section className="space-y-5">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <p className="mb-2 text-[10px] uppercase tracking-[0.28em] text-zinc-500">
-                Combatant ID
-              </p>
-              <h1 className="font-[family-name:var(--font-geist-mono)] text-3xl font-medium tracking-[0.04em] text-white sm:text-4xl">
-                {DEMO_FIGHTER_DISPLAY_ID}
-              </h1>
-            </div>
-            <motion.div layout className="text-right">
-              <p className="mb-1 text-[10px] uppercase tracking-[0.28em] text-zinc-500">
-                Tier rank
-              </p>
-              <AnimatePresence mode="wait" initial={false}>
-                <motion.p
-                  key={level}
-                  className="font-[family-name:var(--font-geist-mono)] text-xl text-cyan-300 sm:text-2xl"
-                  initial={{ opacity: 0, y: 8, scale: 0.96 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                  transition={{ type: "spring", stiffness: 380, damping: 28 }}
-                >
-                  Level {level}
-                  <span className="text-zinc-500">/23</span>
-                </motion.p>
-              </AnimatePresence>
+              {activeTab === "vitals" ? <VitalsTab /> : null}
             </motion.div>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex justify-between text-[11px] uppercase tracking-wider text-zinc-500">
-              <span>XP arc · tier {bracket.level}</span>
-              <span>
-                {bracket.xpForNext !== null
-                  ? `${Math.ceil(bracket.xpForNext)} XP to next gate`
-                  : "Grandmaster orbit"}
-              </span>
-            </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-zinc-900">
-              <motion.div
-                className="h-full rounded-full bg-gradient-to-r from-cyan-500 via-cyan-300 to-fuchsia-500 shadow-[0_0_28px_rgba(34,211,238,0.5)]"
-                layout
-                initial={false}
-                animate={{
-                  width: `${Math.min(100, Math.max(bracket.pctInLevel * 100, 3))}%`,
-                }}
-                transition={{ type: "spring", stiffness: 220, damping: 28 }}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex justify-between text-[11px] uppercase tracking-wider text-zinc-500">
-              <span>Global progression echo</span>
-              <span>Grandmaster frontier</span>
-            </div>
-            <div className="h-1 overflow-hidden rounded-full bg-zinc-900">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-cyan-500/60 via-cyan-300/50 to-fuchsia-500/60"
-                style={{ width: `${Math.min(pctArc, 100)}%` }}
-              />
-            </div>
-          </div>
-        </section>
-
-        <section className="relative overflow-hidden rounded-2xl border border-white/[0.1] bg-zinc-950/80 p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.04)_inset] backdrop-blur-md sm:p-6">
-          <div className="pointer-events-none absolute -right-24 -top-24 h-48 w-48 rounded-full bg-cyan-500/20 blur-3xl motion-safe:animate-pulse" />
-          <div className="pointer-events-none absolute -bottom-20 -left-16 h-40 w-40 rounded-full bg-fuchsia-500/15 blur-3xl motion-safe:animate-pulse motion-safe:[animation-delay:750ms]" />
-
-          <div className="relative flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="mb-3 text-[10px] uppercase tracking-[0.3em] text-zinc-500">
-                Global ELO
-              </p>
-              <p className="font-[family-name:var(--font-geist-mono)] text-5xl font-semibold tabular-nums tracking-tight text-white sm:text-6xl motion-safe:[text-shadow:_0_0_42px_rgba(34,211,238,0.35)]">
-                {SHOWCASE.elo}
-              </p>
-              <p className="mt-3 flex items-center gap-2 font-[family-name:var(--font-geist-mono)] text-sm tabular-nums text-emerald-400">
-                <span className="motion-safe:inline-block motion-safe:animate-pulse">
-                  ↑
-                </span>
-                {SHOWCASE.eloDelta30d} last 30 days
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-cyan-400/25 bg-black/45 px-4 py-3 text-right">
-              <p className="text-[10px] uppercase tracking-[0.25em] text-zinc-500">
-                Worldwide standing
-              </p>
-              <p className="mt-2 font-[family-name:var(--font-geist-mono)] text-2xl text-cyan-200">
-                Top {SHOWCASE.globalPct}%
-              </p>
-              <p className="mt-1 text-xs text-zinc-500">
-                percentile · live leaderboard pool
-              </p>
-            </div>
-          </div>
-
-          <div className="relative mt-6 flex h-10 items-end gap-0.5 sm:gap-1">
-            {[0.35, 0.5, 0.42, 0.62, 0.55, 0.71, 0.68, 0.82, 0.77, 0.9].map(
-              (h, i) => (
-                <span
-                  key={i}
-                  className="flex-1 origin-bottom rounded-sm bg-gradient-to-t from-cyan-600/30 to-cyan-400 motion-safe:animate-[pulse_2.8s_ease-in-out_infinite]"
-                  style={{
-                    height: `${h * 100}%`,
-                    animationDelay: `${i * 120}ms`,
-                  }}
-                />
-              ),
-            )}
-          </div>
-
-          <p className="mt-5 flex flex-wrap gap-x-2 text-[11px] text-zinc-500">
-            <span>Trial sessions audited · lifetime</span>
-            <motion.span
-              key={sessionsRecorded}
-              className="font-[family-name:var(--font-geist-mono)] text-zinc-300"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-            >
-              {sessionsRecorded}
-            </motion.span>
-          </p>
-        </section>
-
-        <section className="rounded-2xl border border-white/[0.08] bg-zinc-950/65 p-5 sm:p-6">
-          <h2 className="mb-4 text-[11px] font-medium uppercase tracking-[0.28em] text-zinc-500">
-            Sovereign payouts · RUB
-          </h2>
-          <ul className="space-y-3 font-[family-name:var(--font-geist-mono)] text-sm tabular-nums sm:text-base">
-            <li className="flex justify-between gap-4 border-b border-white/[0.06] pb-3">
-              <span className="text-zinc-400">Gross settlements</span>
-              <span className="text-white">{fmt.format(careerGrossRub)}</span>
-            </li>
-            <li className="flex justify-between gap-4 border-b border-white/[0.06] pb-3">
-              <span className="text-zinc-400">
-                Platform fee ({PLATFORM_COMMISSION_PCT}%)
-              </span>
-              <span className="text-amber-200/95">
-                −{fmt.format(Math.round(careerCommissionRub))}
-              </span>
-            </li>
-            <li className="flex justify-between gap-4 pt-1">
-              <span className="font-medium uppercase tracking-wide text-zinc-300">
-                Net to combatant
-              </span>
-              <span className="text-xl font-semibold text-white sm:text-2xl">
-                {fmt.format(Math.round(careerNetRub))}
-              </span>
-            </li>
-          </ul>
-          <p className="mt-4 text-[11px] leading-relaxed text-zinc-500">
-            Figures mirror Warrior Point withholdings · every sanctioned training
-            line subject to nineteen‑percent protocol levy.
-          </p>
-        </section>
-
-        {/* Fighter Profile Details — neon stat tiles */}
-        <section className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-[11px] font-medium uppercase tracking-[0.28em] text-zinc-500">
-              Fighter profile details
-            </h2>
-            <p className="font-[family-name:var(--font-geist-mono)] text-[10px] uppercase tracking-[0.22em] text-zinc-600">
-              Live ledger · {sessionsRecorded} sessions
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
-            <CyberStatTile
-              label="Total Sessions"
-              value={sessionsRecorded}
-              hint="Audited training count"
-              accent="cyan"
-              active={statFocus === "sessions"}
-              onActivate={() =>
-                setStatFocus((s) => (s === "sessions" ? null : "sessions"))
-              }
-              glyph={
-                <svg
-                  viewBox="0 0 16 16"
-                  width="14"
-                  height="14"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  aria-hidden
-                >
-                  <path d="M2 8h2.5l1.5-4 3 8 1.5-4H14" />
-                </svg>
-              }
-            />
-
-            <CyberStatTile
-              label="Career Earnings"
-              value={careerGrossRub}
-              format={(v) => fmt.format(v)}
-              hint="Gross before 19% levy"
-              accent="fuchsia"
-              active={statFocus === "earnings"}
-              onActivate={() =>
-                setStatFocus((s) => (s === "earnings" ? null : "earnings"))
-              }
-              glyph={
-                <svg
-                  viewBox="0 0 16 16"
-                  width="14"
-                  height="14"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  aria-hidden
-                >
-                  <path d="M3 12l4-4 3 3 4-6" />
-                  <path d="M10 5h4v4" />
-                </svg>
-              }
-            />
-
-            <CyberStatTile
-              label="Coach Revenue"
-              value={Math.round(careerCommissionRub)}
-              format={(v) => fmt.format(v)}
-              hint={`${PLATFORM_COMMISSION_PCT}% protocol levy`}
-              accent="amber"
-              active={statFocus === "coach"}
-              onActivate={() =>
-                setStatFocus((s) => (s === "coach" ? null : "coach"))
-              }
-              glyph={
-                <svg
-                  viewBox="0 0 16 16"
-                  width="14"
-                  height="14"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  aria-hidden
-                >
-                  <circle cx="5" cy="5" r="2" />
-                  <circle cx="11" cy="11" r="2" />
-                  <path d="M13 3L3 13" />
-                </svg>
-              }
-            />
-          </div>
-
-          <AnimatePresence mode="popLayout">
-            {statFocus !== null ? (
-              <motion.p
-                key={statFocus}
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-                className="rounded-lg border border-white/[0.07] bg-black/55 px-3 py-2 font-[family-name:var(--font-geist-mono)] text-[11px] leading-relaxed text-zinc-400 sm:px-4"
-              >
-                {STAT_FOCUS_NOTES[statFocus]}
-              </motion.p>
-            ) : null}
           </AnimatePresence>
-        </section>
+        </div>
 
-        <section className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-950/40 via-black/80 to-black/90 p-5 sm:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-[11px] font-medium uppercase tracking-[0.28em] text-emerald-400/90">
-              Biometrics
-            </h2>
-            <span className="rounded-full border border-emerald-500/45 bg-emerald-500/10 px-3 py-1 text-[10px] font-medium uppercase tracking-wider text-emerald-300">
-              Ready for Apple Health
-            </span>
-          </div>
-          <p className="mt-3 text-sm text-zinc-400">
-            Encrypted physiological reserve for cross‑border sanction reviews.
-          </p>
-          <dl className="mt-5 grid grid-cols-3 gap-3 text-center sm:gap-4">
-            {[
-              { label: "HRV", val: "—", hint: "sync standby" },
-              { label: "Recovery", val: "—", hint: "sync standby" },
-              { label: "Load index", val: "—", hint: "sync standby" },
-            ].map((row) => (
-              <div
-                key={row.label}
-                className="rounded-xl border border-white/[0.06] bg-black/35 px-2 py-3 sm:py-4"
-              >
-                <dt className="text-[10px] uppercase tracking-wider text-zinc-500">
-                  {row.label}
-                </dt>
-                <dd className="mt-2 font-[family-name:var(--font-geist-mono)] text-lg text-white">
-                  {row.val}
-                </dd>
-                <p className="mt-1 text-[10px] text-zinc-600">{row.hint}</p>
-              </div>
-            ))}
-          </dl>
-        </section>
-
-        <footer className="border-t border-white/[0.06] pt-8 text-center text-[10px] uppercase tracking-[0.2em] text-zinc-600">
+        <footer className="pt-4 text-center text-[10px] uppercase tracking-[0.22em] text-zinc-600">
           Warrior Point · Sovereign ledger · Worldwide
         </footer>
       </main>
     </div>
+  );
+}
+
+/* ───────────────────── sub‑components ───────────────────── */
+
+function GiftGlyph({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      className={className}
+    >
+      <rect x="3.5" y="9" width="17" height="11" rx="1.3" />
+      <path d="M3.5 13.5h17" />
+      <path d="M12 9v11" />
+      <path d="M12 9c-1.6-2.8-6.2-2.2-6.2 0.6 0 1.6 2.4 1.6 4 1.6h2.2z" />
+      <path d="M12 9c1.6-2.8 6.2-2.2 6.2 0.6 0 1.6-2.4 1.6-4 1.6H12z" />
+    </svg>
+  );
+}
+
+function TrophyGlyph({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      className={className}
+    >
+      <path d="M7 4h10v4a5 5 0 0 1-10 0V4z" />
+      <path d="M17 5h3v2a3 3 0 0 1-3 3" />
+      <path d="M7 5H4v2a3 3 0 0 0 3 3" />
+      <path d="M9 14h6v3H9z" />
+      <path d="M8 20h8" />
+      <path d="M12 14v3" />
+    </svg>
+  );
+}
+
+/**
+ * Opens the Agents Window admin panel. Pulses softly when the current
+ * fighter already holds the Winner-of-the-Month status so admins can see
+ * state at a glance.
+ */
+function AdminAgentsTrigger({
+  onClick,
+  pulse,
+}: {
+  onClick: () => void;
+  pulse: boolean;
+}) {
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      aria-label="Open Agents Window (admin)"
+      title="Agents Window · admin panel"
+      className={
+        pulse
+          ? "relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-amber-300/70 bg-amber-500/[0.18] text-amber-200 shadow-[0_0_18px_-4px_rgba(250,204,21,0.7)] transition-colors"
+          : "relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-amber-400/50 bg-amber-500/[0.06] text-amber-300 transition-colors hover:border-amber-300 hover:bg-amber-500/[0.13] hover:text-amber-200"
+      }
+      whileHover={{ scale: 1.08 }}
+      whileTap={{ scale: 0.94 }}
+      animate={
+        pulse
+          ? {
+              boxShadow: [
+                "0 0 0px rgba(250,204,21,0)",
+                "0 0 22px rgba(250,204,21,0.55)",
+                "0 0 0px rgba(250,204,21,0)",
+              ],
+            }
+          : undefined
+      }
+      transition={
+        pulse
+          ? { duration: 2.2, repeat: Infinity, ease: "easeInOut" }
+          : { type: "spring", stiffness: 320, damping: 22 }
+      }
+    >
+      <TrophyGlyph className="h-4 w-4" />
+      <span className="sr-only">Open Agents Window</span>
+    </motion.button>
+  );
+}
+
+function RankPill({ level, maxLevel }: { level: number; maxLevel: number }) {
+  return (
+    <AnimatePresence mode="wait" initial={false}>
+      <motion.span
+        key={level}
+        initial={{ opacity: 0, y: 6, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: -6, scale: 0.98 }}
+        transition={{ type: "spring", stiffness: 380, damping: 28 }}
+        className="inline-flex items-center gap-2 rounded-full border border-cyan-400/45 bg-cyan-500/[0.08] px-3 py-1 font-[family-name:var(--font-geist-mono)] text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-200"
+        style={{ boxShadow: "0 0 22px -6px rgba(34,211,238,0.55)" }}
+      >
+        Level {level}
+        <span className="text-zinc-500">/{maxLevel}</span>
+      </motion.span>
+    </AnimatePresence>
+  );
+}
+
+function RecordSessionAction(props: {
+  onRecord: () => void;
+  busy: boolean;
+  disabled: boolean;
+  fmt: Intl.NumberFormat;
+  echo:
+    | { tone: "ok"; message: string }
+    | { tone: "err"; message: string }
+    | null;
+}) {
+  const { onRecord, busy, disabled, fmt, echo } = props;
+
+  return (
+    <div className="flex flex-col items-center gap-3.5">
+      <p className="max-w-md text-center text-[11px] leading-relaxed text-zinc-400 sm:text-xs">
+        <span className="mr-2 font-[family-name:var(--font-geist-mono)] text-[10px] font-semibold uppercase tracking-[0.3em] text-cyan-300/95">
+          Ledger sync
+        </span>
+        Каждое нажатие — строка в{" "}
+        <span className="font-[family-name:var(--font-geist-mono)] text-zinc-200">
+          training_sessions
+        </span>
+        . Платформа удерживает{" "}
+        <span className="font-medium text-white">
+          {PLATFORM_COMMISSION_PCT}%
+        </span>
+        , XP начисляется от чистой выплаты.
+      </p>
+
+      <div className="flex w-full max-w-sm flex-col items-center gap-1.5">
+        <span className="font-[family-name:var(--font-geist-mono)] text-[9.5px] uppercase tracking-[0.32em] text-zinc-500">
+          Тариф · демо ·{" "}
+          <span className="text-zinc-300">
+            {fmt.format(DEMO_SESSION_GROSS_RUB)}
+          </span>
+        </span>
+
+        <motion.button
+          type="button"
+          onClick={onRecord}
+          disabled={busy || disabled}
+          aria-busy={busy || disabled}
+          className="group relative w-full overflow-hidden rounded-full border border-cyan-400/45 bg-black/70 px-6 py-3 text-center font-[family-name:var(--font-geist-mono)] text-[11px] font-semibold uppercase tracking-[0.34em] text-cyan-100 shadow-[0_0_30px_-10px_rgba(34,211,238,0.55)] backdrop-blur-sm disabled:pointer-events-none disabled:opacity-50 sm:max-w-xs sm:px-7 sm:py-3.5"
+          whileTap={{ scale: busy ? 1 : 0.97 }}
+          whileHover={{
+            scale: 1.012,
+            boxShadow:
+              "0 0 48px -10px rgba(34,211,238,0.7), inset 0 0 0 1px rgba(244,232,212,0.18)",
+            borderColor: "rgba(244,232,212,0.45)",
+          }}
+        >
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-[1px] rounded-full"
+            style={{
+              background:
+                "radial-gradient(circle at 50% -20%, rgba(34,211,238,0.22), transparent 65%)",
+            }}
+          />
+          <span className="pointer-events-none absolute inset-0 translate-y-full bg-gradient-to-t from-cyan-500/[0.18] via-transparent opacity-0 transition duration-500 group-hover:translate-y-1/3 group-hover:opacity-100" />
+          <span className="relative">
+            {busy ? "СИНХ…" : "ЗАПИСАТЬ СЕССИЮ"}
+          </span>
+        </motion.button>
+      </div>
+
+      <AnimatePresence>
+        {echo ? (
+          <motion.p
+            key={echo.message}
+            role="status"
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.2 }}
+            className={
+              echo.tone === "ok"
+                ? "rounded-full border border-emerald-400/35 bg-emerald-500/[0.1] px-4 py-1.5 text-center text-[10.5px] font-semibold uppercase tracking-[0.24em] text-emerald-200"
+                : "rounded-full border border-amber-500/35 bg-amber-500/[0.08] px-4 py-1.5 text-center text-[10.5px] font-semibold uppercase tracking-[0.2em] text-amber-100"
+            }
+          >
+            {echo.message}
+          </motion.p>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function OverviewTab(props: {
+  sessionsRecorded: number;
+  careerGrossRub: number;
+  careerCommissionRub: number;
+  fmt: Intl.NumberFormat;
+  lastSession: TrainingSessionEconomyResult | null;
+}) {
+  const { sessionsRecorded, careerGrossRub, careerCommissionRub, fmt, lastSession } =
+    props;
+
+  const [focus, setFocus] = useState<
+    "sessions" | "earnings" | "coach" | null
+  >(null);
+
+  const FOCUS_NOTES = {
+    sessions:
+      "Каждое нажатие RECORD SESSION = строка в `training_sessions` (1 000 ₽ gross)",
+    earnings: "Сумма `gross_amount` со всех аудированных сессий бойца",
+    coach: "19% удержание платформы · кэш тренеру / Warrior Point",
+  } as const;
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
+        <CyberStatTile
+          label="Total Sessions"
+          value={sessionsRecorded}
+          hint="Audited training count"
+          accent="cyan"
+          active={focus === "sessions"}
+          onActivate={() =>
+            setFocus((s) => (s === "sessions" ? null : "sessions"))
+          }
+          glyph={
+            <svg
+              viewBox="0 0 16 16"
+              width="14"
+              height="14"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              aria-hidden
+            >
+              <path d="M2 8h2.5l1.5-4 3 8 1.5-4H14" />
+            </svg>
+          }
+        />
+
+        <CyberStatTile
+          label="Career Earnings"
+          value={careerGrossRub}
+          format={(v) => fmt.format(v)}
+          hint="Gross before 19% levy"
+          accent="fuchsia"
+          active={focus === "earnings"}
+          onActivate={() =>
+            setFocus((s) => (s === "earnings" ? null : "earnings"))
+          }
+          glyph={
+            <svg
+              viewBox="0 0 16 16"
+              width="14"
+              height="14"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              aria-hidden
+            >
+              <path d="M3 12l4-4 3 3 4-6" />
+              <path d="M10 5h4v4" />
+            </svg>
+          }
+        />
+
+        <CyberStatTile
+          label="Coach Revenue"
+          value={Math.round(careerCommissionRub)}
+          format={(v) => fmt.format(v)}
+          hint={`${PLATFORM_COMMISSION_PCT}% protocol levy`}
+          accent="amber"
+          active={focus === "coach"}
+          onActivate={() => setFocus((s) => (s === "coach" ? null : "coach"))}
+          glyph={
+            <svg
+              viewBox="0 0 16 16"
+              width="14"
+              height="14"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              aria-hidden
+            >
+              <circle cx="5" cy="5" r="2" />
+              <circle cx="11" cy="11" r="2" />
+              <path d="M13 3L3 13" />
+            </svg>
+          }
+        />
+      </div>
+
+      <AnimatePresence mode="popLayout">
+        {focus !== null ? (
+          <motion.p
+            key={focus}
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            className="rounded-lg border border-white/[0.07] bg-black/55 px-3 py-2 font-[family-name:var(--font-geist-mono)] text-[11px] leading-relaxed text-zinc-400 sm:px-4"
+          >
+            {FOCUS_NOTES[focus]}
+          </motion.p>
+        ) : null}
+      </AnimatePresence>
+
+      {lastSession ? (
+        <LastSessionRibbon
+          breakdown={lastSession.breakdown}
+          xpAward={lastSession.xpAward}
+          fmt={fmt}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function LedgerTab(props: {
+  careerGrossRub: number;
+  careerCommissionRub: number;
+  careerNetRub: number;
+  fmt: Intl.NumberFormat;
+}) {
+  const { careerGrossRub, careerCommissionRub, careerNetRub, fmt } = props;
+
+  return (
+    <section className="rounded-2xl border border-white/[0.08] bg-zinc-950/65 p-5 sm:p-7">
+      <h2 className="text-[11px] font-medium uppercase tracking-[0.28em] text-zinc-500">
+        Суверенные выплаты · RUB
+      </h2>
+      <ul className="mt-5 space-y-3 font-[family-name:var(--font-geist-mono)] text-sm tabular-nums sm:text-base">
+        <li className="flex justify-between gap-4 border-b border-white/[0.06] pb-3">
+          <span className="text-zinc-400">Брутто</span>
+          <span className="text-white">{fmt.format(careerGrossRub)}</span>
+        </li>
+        <li className="flex justify-between gap-4 border-b border-white/[0.06] pb-3">
+          <span className="text-zinc-400">
+            Комиссия платформы ({PLATFORM_COMMISSION_PCT}%)
+          </span>
+          <span className="text-amber-200/95">
+            −{fmt.format(Math.round(careerCommissionRub))}
+          </span>
+        </li>
+        <li className="flex justify-between gap-4 pt-1">
+          <span className="font-medium uppercase tracking-wide text-zinc-300">
+            Бойцу на руки
+          </span>
+          <span className="text-xl font-semibold text-white sm:text-2xl">
+            {fmt.format(Math.round(careerNetRub))}
+          </span>
+        </li>
+      </ul>
+      <p className="mt-5 text-[11px] leading-relaxed text-zinc-500">
+        Цифры отражают удержания Warrior Point · 19% протокольная комиссия с
+        каждой санкционированной строки.
+      </p>
+    </section>
+  );
+}
+
+function VitalsTab() {
+  return (
+    <section className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-950/40 via-black/80 to-black/90 p-5 sm:p-7">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-[11px] font-medium uppercase tracking-[0.28em] text-emerald-400/90">
+          Биометрия
+        </h2>
+        <span className="rounded-full border border-emerald-500/45 bg-emerald-500/10 px-3 py-1 text-[10px] font-medium uppercase tracking-wider text-emerald-300">
+          Ready for Apple Health
+        </span>
+      </div>
+      <p className="mt-3 text-sm text-zinc-400">
+        Зашифрованный физиологический резерв для трансграничных санкционных
+        проверок.
+      </p>
+      <dl className="mt-6 grid grid-cols-3 gap-3 text-center sm:gap-4">
+        {[
+          { label: "HRV", val: "—", hint: "sync standby" },
+          { label: "Recovery", val: "—", hint: "sync standby" },
+          { label: "Load index", val: "—", hint: "sync standby" },
+        ].map((row) => (
+          <div
+            key={row.label}
+            className="rounded-xl border border-white/[0.06] bg-black/35 px-2 py-4 sm:py-5"
+          >
+            <dt className="text-[10px] uppercase tracking-wider text-zinc-500">
+              {row.label}
+            </dt>
+            <dd className="mt-2 font-[family-name:var(--font-geist-mono)] text-lg text-white">
+              {row.val}
+            </dd>
+            <p className="mt-1 text-[10px] text-zinc-600">{row.hint}</p>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
 
@@ -721,34 +1099,147 @@ function LastSessionRibbon(props: {
 
   return (
     <motion.div
-      className="mt-4 rounded-lg border border-cyan-400/25 bg-black/55 px-3 py-2.5 sm:px-4"
+      className="rounded-2xl border border-cyan-400/25 bg-black/55 px-4 py-3 sm:px-5 sm:py-4"
       layout
       initial={{ opacity: 0, y: -6 }}
       animate={{ opacity: 1, y: 0 }}
     >
       <p className="text-[10px] uppercase tracking-[0.28em] text-zinc-500">
-        Latest sanction
+        Последняя санкция
       </p>
       <ul className="mt-2 grid gap-1 font-[family-name:var(--font-geist-mono)] text-[11px] tabular-nums text-zinc-300 sm:text-xs">
         <li className="flex justify-between gap-3">
-          <span className="text-zinc-500">Gross</span>
+          <span className="text-zinc-500">Брутто</span>
           <span>{fmt.format(breakdown.gross)}</span>
         </li>
         <li className="flex justify-between gap-3">
-          <span className="text-zinc-500">Fee {breakdown.commissionPct}%</span>
+          <span className="text-zinc-500">
+            Комиссия {breakdown.commissionPct}%
+          </span>
           <span className="text-amber-200/95">
             −{fmt.format(breakdown.commission)}
           </span>
         </li>
         <li className="flex justify-between gap-3 pt-1 text-white">
-          <span className="uppercase tracking-wider text-zinc-400">Net</span>
+          <span className="uppercase tracking-wider text-zinc-400">Нетто</span>
           <span>{fmt.format(breakdown.net)}</span>
         </li>
         <li className="flex justify-between gap-3 border-t border-white/[0.06] pt-2 text-cyan-200">
-          <span className="text-zinc-500">XP routed</span>
+          <span className="text-zinc-500">Зачислено XP</span>
           <span>+{xpAward}</span>
         </li>
       </ul>
+    </motion.div>
+  );
+}
+
+function LevelUpOverlay(props: {
+  levelAfter: number;
+  levelsJumped: number;
+  onDismiss: () => void;
+}) {
+  const { levelAfter, levelsJumped, onDismiss } = props;
+
+  return (
+    <motion.div
+      key="level-veil"
+      className="fixed inset-0 z-40 flex cursor-pointer items-center justify-center bg-black/85 px-6 backdrop-blur-md"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.25 }}
+      onClick={onDismiss}
+    >
+      <motion.div
+        className="flex max-w-sm flex-col items-center text-center"
+        initial={{ scale: 0.86, rotateX: -6, opacity: 0 }}
+        animate={{ scale: 1, rotateX: 0, opacity: 1 }}
+        exit={{ scale: 0.92, opacity: 0, filter: "blur(14px)" }}
+        transition={{ type: "spring", stiffness: 320, damping: 22 }}
+      >
+        <motion.p
+          className="font-[family-name:var(--font-geist-mono)] text-xs uppercase tracking-[0.52em] text-cyan-300/95"
+          initial={{ y: -12, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{
+            delay: 0.05,
+            duration: 0.35,
+            ease: [0.22, 1, 0.36, 1],
+          }}
+        >
+          Warrior Point
+        </motion.p>
+
+        <div className="mt-10 flex flex-col items-center gap-1 sm:gap-2">
+          <motion.span
+            className="block font-black uppercase tracking-[0.45em] text-white sm:text-xl"
+            style={{ fontSize: "clamp(2.15rem,7vw,3.25rem)" }}
+            initial={{ y: 18, opacity: 0, skewX: -6 }}
+            animate={{ y: 0, opacity: 1, skewX: 0 }}
+            transition={{
+              type: "spring",
+              stiffness: 260,
+              damping: 14,
+              delay: 0.12,
+            }}
+          >
+            LEVEL
+          </motion.span>
+
+          <motion.span
+            className="bg-gradient-to-r from-cyan-300 via-white to-fuchsia-300 bg-clip-text font-black uppercase tracking-[0.28em]"
+            style={{
+              WebkitBackgroundClip: "text",
+              fontSize: "clamp(3.4rem,12vw,5.75rem)",
+              WebkitTextFillColor: "transparent",
+            }}
+            initial={{ scale: 0.5, opacity: 0, filter: "blur(22px)" }}
+            animate={{ scale: 1, opacity: 1, filter: "blur(0px)" }}
+            transition={{
+              type: "spring",
+              stiffness: 410,
+              damping: 24,
+              delay: 0.22,
+            }}
+          >
+            UP
+          </motion.span>
+
+          <motion.p
+            className="mt-6 font-[family-name:var(--font-geist-mono)] text-2xl text-zinc-200 sm:text-3xl"
+            initial={{ y: 10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{
+              delay: 0.42,
+              duration: 0.35,
+              ease: [0.22, 1, 0.36, 1],
+            }}
+          >
+            Ранг {levelAfter}
+            <span className="text-zinc-500"> /23</span>
+          </motion.p>
+
+          {levelsJumped > 1 ? (
+            <motion.p
+              className="mt-2 text-sm uppercase tracking-[0.25em] text-fuchsia-300/95"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.55 }}
+            >
+              +{levelsJumped} прыжков по тиерам · взрыв удостоверен
+            </motion.p>
+          ) : (
+            <motion.p
+              className="mt-2 text-[11px] uppercase tracking-[0.32em] text-zinc-500"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.55 }}
+            >
+              Глобальная лестница обновлена
+            </motion.p>
+          )}
+        </div>
+      </motion.div>
     </motion.div>
   );
 }
