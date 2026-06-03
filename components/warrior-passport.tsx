@@ -368,6 +368,7 @@ export function WarriorPassport() {
                 promotions={DEMO_FIGHTER_PROMOTIONS.split(" · ")}
                 streak={4}
                 isWinner={isWinner}
+                videoSrc="https://vk.com/video-190459948_456239028"
               />
 
               <div className="min-w-0 flex-1 text-center sm:text-left">

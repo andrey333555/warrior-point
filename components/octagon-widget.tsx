@@ -19,9 +19,9 @@
  * Center: Fighter avatar (initials) + video play button.
  */
 
-import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LotusIcon, PromotionsRow } from "@/components/lotus-icon";
+import { VideoPlayer } from "@/components/video-player";
 import {
   AcaLogo,
   RccLogo,
@@ -137,7 +137,7 @@ const PARTNER_CLUBS = [
 // ── Component props ──────────────────────────────────────────────────────────
 
 type OctagonWidgetProps = {
-  /** Fighter initials shown in centre. */
+  /** Fighter initials shown in centre when no video. */
   initials: string;
   wins:    number;
   losses:  number;
@@ -155,8 +155,14 @@ type OctagonWidgetProps = {
   accent?: string;
   /** If true, a gold winner ring pulses. */
   isWinner?: boolean;
-  /** Called when user clicks the centre avatar. */
-  onAvatarClick?: () => void;
+  /**
+   * Optional highlight video URL.
+   * Supports VK Видео, YouTube, Rutube, or direct iframe src.
+   * Example: "https://vk.com/video-190459948_456239028"
+   */
+  videoSrc?: string;
+  /** Optional poster/thumbnail image URL. */
+  posterUrl?: string;
 };
 
 // ── Stat Pod subcomponent ────────────────────────────────────────────────────
@@ -240,16 +246,10 @@ export function OctagonWidget({
   streak,
   accent = CYAN,
   isWinner = false,
-  onAvatarClick,
+  videoSrc,
+  posterUrl,
 }: OctagonWidgetProps) {
-  const [videoPlaying, setVideoPlaying] = useState(false);
-
   const promoLine = promotions?.slice(0, 3).join(" · ") ?? "ACA · RCC · M-1";
-
-  const handleCentreClick = useCallback(() => {
-    setVideoPlaying((v) => !v);
-    onAvatarClick?.();
-  }, [onAvatarClick]);
 
   const [p0x, p0y] = podPos(0); // top — record
   const [p1x, p1y] = podPos(1); // top-right — promotions
@@ -335,11 +335,9 @@ export function OctagonWidget({
         })}
       </svg>
 
-      {/* ── Centre avatar / video container ────────────────────────────── */}
-      <button
-        type="button"
-        onClick={handleCentreClick}
-        className="absolute flex flex-col items-center justify-center overflow-hidden rounded-none focus:outline-none"
+      {/* ── Centre: VideoPlayer (VK / YouTube / Rutube) ─────────────────── */}
+      <div
+        className="absolute flex items-center justify-center overflow-hidden"
         style={{
           left: OFF,
           top: OFF,
@@ -348,51 +346,15 @@ export function OctagonWidget({
           clipPath: `polygon(${P}px 0px, ${Q}px 0px, ${OCT}px ${P}px, ${OCT}px ${Q}px, ${Q}px ${OCT}px, ${P}px ${OCT}px, 0px ${Q}px, 0px ${P}px)`,
           background: `radial-gradient(ellipse at center, ${accent}14 0%, #09090b 70%)`,
         }}
-        aria-label={videoPlaying ? "Остановить видео" : "Воспроизвести визитку"}
       >
-        <AnimatePresence mode="wait">
-          {videoPlaying ? (
-            <motion.div
-              key="playing"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="flex h-full w-full items-center justify-center"
-            >
-              <span
-                className="font-[family-name:var(--font-geist-mono)] text-[10px] uppercase tracking-[0.22em]"
-                style={{ color: accent }}
-              >
-                ▶ Video · TBD
-              </span>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="idle"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="flex flex-col items-center gap-1"
-            >
-              {/* Fighter initials */}
-              <span
-                className="font-[family-name:var(--font-geist-mono)] text-[36px] font-black uppercase leading-none tracking-[-0.03em]"
-                style={{
-                  color: accent,
-                  textShadow: `0 0 28px ${accent}80`,
-                }}
-              >
-                {initials}
-              </span>
-
-              {/* Play icon */}
-              <span className="text-zinc-600" style={{ fontSize: 11 }}>
-                ▶
-              </span>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </button>
+        <VideoPlayer
+          src={videoSrc}
+          posterInitials={initials}
+          posterUrl={posterUrl}
+          accent={accent}
+          size={OCT}
+        />
+      </div>
 
       {/* ── 8 Stat Pods ─────────────────────────────────────────────────── */}
 

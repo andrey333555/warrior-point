@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import { CyberNav } from "@/components/cyber-nav";
+import { TelegramTheme } from "@/components/telegram-theme";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -58,6 +60,18 @@ export default function RootLayout({
         className="flex min-h-full flex-col overflow-x-hidden bg-zinc-950 text-zinc-100"
         style={{ WebkitTapHighlightColor: "transparent" }}
       >
+        {/*
+         * Telegram Web App SDK — loaded before interactive so themeParams
+         * are available before first render. Safe no-op in non-Telegram env.
+         */}
+        <Script
+          src="https://telegram.org/js/telegram-web-app.js"
+          strategy="beforeInteractive"
+        />
+
+        {/* Reads Telegram theme and sets --tg-* CSS vars on :root */}
+        <TelegramTheme />
+
         <div className="flex flex-1 flex-col">{children}</div>
         <CyberNav />
       </body>
