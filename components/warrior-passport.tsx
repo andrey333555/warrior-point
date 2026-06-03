@@ -16,9 +16,15 @@ import {
 } from "@/lib/economy";
 import { createWarriorBrowserClient } from "@/lib/supabase/client";
 import { persistWarriorTrainingSession } from "@/lib/supabase/warrior-sync";
-import { fetchFighterHydration } from "@/lib/supabase/read";
+import { fetchFighterHydration, fetchWarriorProfile } from "@/lib/supabase/read";
 import { isWarriorAdminMode, WARRIOR_WINNER_STATUS } from "@/lib/admin";
+import {
+  ROLE_LABELS,
+  canManageWinners,
+  type WarriorRole,
+} from "@/lib/roles";
 import { AgentsWindow } from "@/components/agents-window";
+import { SplitsBoard } from "@/components/splits-board";
 import {
   DEMO_FIGHTER_DB_ID,
   DEMO_FIGHTER_DISPLAY_ID,
@@ -47,12 +53,13 @@ const SHOWCASE = {
 
 type LevelBurst = Pick<FighterAdvancerResult, "levelAfter" | "levelsJumped">;
 
-type TabId = "overview" | "ledger" | "vitals";
+type TabId = "overview" | "ledger" | "vitals" | "splits";
 
 const TABS: ReadonlyArray<CyberTabDef<TabId>> = [
   { id: "overview", label: "Обзор" },
   { id: "ledger", label: "Леджер" },
   { id: "vitals", label: "Витальные" },
+  { id: "splits", label: "Сплиты" },
 ];
 
 export function WarriorPassport() {
@@ -67,9 +74,12 @@ export function WarriorPassport() {
   const [sessionsRecorded, setSessionsRecorded] = useState(0);
 
   const [xp30d, setXp30d] = useState(0);
+  const [monthlyXp, setMonthlyXp] = useState(0);
+  const monthlyXpRef = useRef(0);
 
   const [currentStatus, setCurrentStatus] = useState<string | null>(null);
   const [monthlyWinnerAt, setMonthlyWinnerAt] = useState<string | null>(null);
+  const [role, setRole] = useState<WarriorRole>("fighter");
   const [adminMode, setAdminMode] = useState(false);
   const [agentsOpen, setAgentsOpen] = useState(false);
 
@@ -113,6 +123,8 @@ export function WarriorPassport() {
   const rankReward = rankRewardFor(level);
 
   const isWinner = currentStatus === WARRIOR_WINNER_STATUS;
+  // Admin gate: true when role is 'admin' OR URL carries ?admin=1
+  const isAdminGated = canManageWinners(role) || adminMode;
 
   const fmt = new Intl.NumberFormat("ru-RU", {
     style: "currency",
@@ -141,7 +153,11 @@ export function WarriorPassport() {
       }
 
       try {
-        const ledger = await fetchFighterHydration(client, DEMO_FIGHTER_DB_ID);
+        // Run ledger hydration and profile fetch in parallel
+        const [ledger, profile] = await Promise.all([
+          fetchFighterHydration(client, DEMO_FIGHTER_DB_ID),
+          fetchWarriorProfile(client, DEMO_FIGHTER_DB_ID),
+        ]);
 
         if (aborted) return;
 
@@ -155,8 +171,14 @@ export function WarriorPassport() {
         setSessionsRecorded(ledger.sessionsCount);
         setXp30d(ledger.xp30d);
 
+        // Sync monthly XP ref + state from remote
+        monthlyXpRef.current = ledger.xp30d;
+        setMonthlyXp(ledger.xp30d);
+
         setCurrentStatus(ledger.currentStatus);
         setMonthlyWinnerAt(ledger.monthlyWinnerAt);
+
+        if (profile) setRole(profile.role);
       } catch (error) {
         console.error("[Warrior Point] hydration failed:", error);
       } finally {
@@ -181,6 +203,9 @@ export function WarriorPassport() {
     setCareerNetRub((n) => n + economics.breakdown.net);
     setSessionsRecorded((s) => s + 1);
     setXp30d((x) => x + economics.xpAward);
+
+    monthlyXpRef.current = monthlyXpRef.current + economics.xpAward;
+    setMonthlyXp(monthlyXpRef.current);
 
     setLastSession(economics);
 
@@ -213,6 +238,7 @@ export function WarriorPassport() {
         fighterId: DEMO_FIGHTER_DB_ID,
         economics,
         advancement,
+        monthlyXpAfter: monthlyXpRef.current,
       });
 
       if (error) {
@@ -454,6 +480,9 @@ export function WarriorPassport() {
 
                 <div className="mt-5 flex flex-wrap items-center justify-center gap-3 sm:justify-start">
                   <RankPill level={level} maxLevel={MAX_LEVEL} />
+
+                  <RolePill role={role} />
+
                   <span className="rounded-full border border-emerald-500/35 bg-emerald-500/10 px-3 py-1 font-[family-name:var(--font-geist-mono)] text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-300">
                     Sanctioned · Worldwide
                   </span>
@@ -483,7 +512,7 @@ export function WarriorPassport() {
                     ) : null}
                   </AnimatePresence>
 
-                  {adminMode ? (
+                  {isAdminGated ? (
                     <AdminAgentsTrigger
                       onClick={() => setAgentsOpen(true)}
                       pulse={isWinner}
@@ -654,6 +683,8 @@ export function WarriorPassport() {
                   sessionsRecorded={sessionsRecorded}
                   careerGrossRub={careerGrossRub}
                   careerCommissionRub={careerCommissionRub}
+                  careerNetRub={careerNetRub}
+                  monthlyXp={monthlyXp}
                   fmt={fmt}
                   lastSession={lastSession}
                 />
@@ -669,6 +700,15 @@ export function WarriorPassport() {
               ) : null}
 
               {activeTab === "vitals" ? <VitalsTab /> : null}
+
+              {activeTab === "splits" ? (
+                <SplitsBoard
+                  currentFighterId={DEMO_FIGHTER_DB_ID}
+                  role={role}
+                  adminMode={adminMode}
+                  client={createWarriorBrowserClient()}
+                />
+              ) : null}
             </motion.div>
           </AnimatePresence>
         </div>
@@ -771,6 +811,49 @@ function AdminAgentsTrigger({
       <TrophyGlyph className="h-4 w-4" />
       <span className="sr-only">Open Agents Window</span>
     </motion.button>
+  );
+}
+
+const ROLE_PILL_STYLES: Record<
+  WarriorRole,
+  { border: string; bg: string; text: string; shadow: string }
+> = {
+  admin: {
+    border: "border-amber-400/55",
+    bg: "bg-amber-500/[0.1]",
+    text: "text-amber-200",
+    shadow: "shadow-[0_0_18px_-6px_rgba(250,204,21,0.55)]",
+  },
+  coach: {
+    border: "border-fuchsia-400/45",
+    bg: "bg-fuchsia-500/[0.08]",
+    text: "text-fuchsia-200",
+    shadow: "",
+  },
+  fighter: {
+    border: "border-cyan-400/35",
+    bg: "bg-cyan-500/[0.07]",
+    text: "text-cyan-300",
+    shadow: "",
+  },
+};
+
+function RolePill({ role }: { role: WarriorRole }) {
+  const s = ROLE_PILL_STYLES[role];
+
+  return (
+    <AnimatePresence mode="wait" initial={false}>
+      <motion.span
+        key={role}
+        initial={{ opacity: 0, y: 6, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: -6, scale: 0.98 }}
+        transition={{ type: "spring", stiffness: 380, damping: 28 }}
+        className={`inline-flex items-center gap-1.5 rounded-full border ${s.border} ${s.bg} ${s.shadow} px-3 py-1 font-[family-name:var(--font-geist-mono)] text-[10px] font-semibold uppercase tracking-[0.22em] ${s.text}`}
+      >
+        {ROLE_LABELS[role]}
+      </motion.span>
+    </AnimatePresence>
   );
 }
 
@@ -886,14 +969,23 @@ function OverviewTab(props: {
   sessionsRecorded: number;
   careerGrossRub: number;
   careerCommissionRub: number;
+  careerNetRub: number;
+  monthlyXp: number;
   fmt: Intl.NumberFormat;
   lastSession: TrainingSessionEconomyResult | null;
 }) {
-  const { sessionsRecorded, careerGrossRub, careerCommissionRub, fmt, lastSession } =
-    props;
+  const {
+    sessionsRecorded,
+    careerGrossRub,
+    careerCommissionRub,
+    careerNetRub,
+    monthlyXp,
+    fmt,
+    lastSession,
+  } = props;
 
   const [focus, setFocus] = useState<
-    "sessions" | "earnings" | "coach" | null
+    "sessions" | "earnings" | "coach" | "net" | null
   >(null);
 
   const FOCUS_NOTES = {
@@ -901,6 +993,7 @@ function OverviewTab(props: {
       "Каждое нажатие RECORD SESSION = строка в `training_sessions` (1 000 ₽ gross)",
     earnings: "Сумма `gross_amount` со всех аудированных сессий бойца",
     coach: "19% удержание платформы · кэш тренеру / Warrior Point",
+    net: "Чистая выплата бойцу после удержания комиссии 19%",
   } as const;
 
   return (
@@ -981,6 +1074,34 @@ function OverviewTab(props: {
           }
         />
       </div>
+
+      {/* Net Balance strip — fintech engine output */}
+      <motion.div
+        layout
+        className="flex items-center justify-between gap-4 rounded-2xl border border-cyan-400/25 bg-black/55 px-5 py-4 sm:px-6"
+        style={{ boxShadow: "0 0 30px -14px rgba(34,211,238,0.35)" }}
+      >
+        <button
+          type="button"
+          onClick={() => setFocus((s) => (s === "net" ? null : "net"))}
+          className="flex min-w-0 flex-col text-left"
+        >
+          <span className="font-[family-name:var(--font-geist-mono)] text-[9.5px] font-semibold uppercase tracking-[0.32em] text-zinc-500">
+            Мой баланс · нетто
+          </span>
+          <span className="mt-1 font-[family-name:var(--font-geist-mono)] text-xl font-bold tabular-nums text-cyan-200 sm:text-2xl">
+            {fmt.format(Math.round(careerNetRub))}
+          </span>
+        </button>
+        <div className="text-right">
+          <span className="block font-[family-name:var(--font-geist-mono)] text-[9.5px] uppercase tracking-[0.28em] text-zinc-500">
+            XP за 30 дней
+          </span>
+          <span className="mt-1 block font-[family-name:var(--font-geist-mono)] text-lg font-bold tabular-nums text-fuchsia-200">
+            +{monthlyXp}
+          </span>
+        </div>
+      </motion.div>
 
       <AnimatePresence mode="popLayout">
         {focus !== null ? (

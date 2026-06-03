@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const LINKS = [
   { href: "/", label: "Passport", match: /^\/$/ },
   { href: "/leaderboard", label: "Leaderboard", match: /^\/leaderboard/ },
+  { href: "/map", label: "Map", match: /^\/map/ },
 ];
 
 /**

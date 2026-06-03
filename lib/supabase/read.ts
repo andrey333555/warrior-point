@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { formatFighterLedgerName } from "@/lib/format-fighter";
+import {
+  resolveWarriorRole,
+  type WarriorProfile,
+} from "@/lib/roles";
 
 function num(v: unknown): number {
   if (typeof v === "bigint") return Number(v);
@@ -14,6 +18,31 @@ function num(v: unknown): number {
 }
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Read one profile (role + coach link). Returns null if the `profiles` table
+ * hasn't been migrated yet so callers can fall back to a default role.
+ */
+export async function fetchWarriorProfile(
+  client: SupabaseClient,
+  profileId: string,
+): Promise<WarriorProfile | null> {
+  const { data, error } = await client
+    .from("profiles")
+    .select("id, display_name, role, coach_id")
+    .eq("id", profileId)
+    .maybeSingle();
+
+  if (error || !data) return null;
+
+  return {
+    id: data.id as string,
+    displayName:
+      typeof data.display_name === "string" ? data.display_name : null,
+    role: resolveWarriorRole(data.role),
+    coachId: typeof data.coach_id === "string" ? data.coach_id : null,
+  };
+}
 
 export type FighterHydrationPack = Readonly<{
   totalXp: number;
@@ -147,7 +176,11 @@ export async function fetchLeaderboardTopTen(
       .order("total_xp", { ascending: false })
       .limit(10);
 
-    rows = legacy.data ?? null;
+    rows = (legacy.data ?? []).map((r) => ({
+      ...r,
+      current_status: null as string | null,
+      is_winner: false as boolean,
+    }));
   }
 
   if (!rows?.length) return [];
@@ -199,14 +232,54 @@ export type MonthlyXpLeader = Readonly<{
 
 /**
  * Group last-N-days XP by fighter, sort DESC, return top `limit`.
- * This is the canonical "gift candidate" list — the slice used by the
- * admin Gift toggle on the Warrior Passport.
+ *
+ * Strategy (best-effort cascade):
+ *  1. Try the Supabase RPC `get_monthly_xp_leaders` (migration 0003) —
+ *     true server-side SUM aggregation, single round-trip.
+ *  2. Fall back to client-side fan-out if the RPC doesn't exist yet.
  */
 export async function fetchMonthlyXpLeaderboard(
   client: SupabaseClient,
   opts: { days?: number; limit?: number } = {},
 ): Promise<MonthlyXpLeader[]> {
   const { days = 30, limit = 10 } = opts;
+
+  // ── Attempt 1: server-side RPC (migration 0003) ─────────────────────────
+  const { data: rpcData, error: rpcErr } = await client.rpc(
+    "get_monthly_xp_leaders",
+    { days_back: days, top_n: limit },
+  );
+
+  if (!rpcErr && Array.isArray(rpcData) && rpcData.length > 0) {
+    return rpcData.map(
+      (
+        r: {
+          fighter_id: unknown;
+          xp_30d: unknown;
+          sessions_30d: unknown;
+          current_status: unknown;
+          is_winner: unknown;
+        },
+        i: number,
+      ) => {
+        const currentStatus =
+          typeof r.current_status === "string" ? r.current_status : null;
+        const isWinner = r.is_winner === true || currentStatus === "Winner of the Month";
+
+        return {
+          rank: i + 1,
+          fighterSlug: r.fighter_id as string,
+          displayName: formatFighterLedgerName(r.fighter_id as string),
+          xp30d: num(r.xp_30d),
+          sessions30d: num(r.sessions_30d),
+          currentStatus,
+          isWinner,
+        };
+      },
+    );
+  }
+
+  // ── Attempt 2: client-side fan-out fallback (pre-migration 0003) ─────────
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
   const { data: sessRows, error: sessErr } = await client
@@ -240,9 +313,7 @@ export async function fetchMonthlyXpLeaderboard(
     { currentStatus: string | null; isWinner: boolean }
   >();
 
-  if (statsErr && /column .* does not exist/i.test(statsErr.message ?? "")) {
-    // migration not applied — degrade gracefully without status badges
-  } else if (statsRows) {
+  if (!statsErr && statsRows) {
     statusById = new Map(
       statsRows.map((r) => {
         const currentStatus =
