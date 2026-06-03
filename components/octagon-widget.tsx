@@ -21,6 +21,16 @@
 
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { LotusIcon, PromotionsRow } from "@/components/lotus-icon";
+import {
+  AcaLogo,
+  RccLogo,
+  M1Logo,
+  KuzniaLogo,
+  NartLogo,
+  BulldogLogo,
+  SamsonLogo,
+} from "@/components/org-logos";
 
 // ── Geometry constants ────────────────────────────────────────────────────────
 
@@ -91,6 +101,38 @@ const CYAN    = "#22d3ee";
 const FUCHSIA = "#e879f9";
 const AMBER   = "#facc15";
 const EMERALD = "#34d399";
+
+// ── Partner club placeholder data ────────────────────────────────────────────
+
+const PARTNER_CLUBS = [
+  {
+    logo: <NartLogo size={26} color="#a78bfa" />,
+    name: "Нарт",
+    accent: "#a78bfa",
+    petals: [
+      { label: "Статус", value: "Партнёр" },
+      { label: "Локация", value: "Уточняется" },
+    ],
+  },
+  {
+    logo: <BulldogLogo size={26} color="#fb7185" />,
+    name: "Бульдог",
+    accent: "#fb7185",
+    petals: [
+      { label: "Статус", value: "Партнёр" },
+      { label: "Стиль", value: "MMA" },
+    ],
+  },
+  {
+    logo: <SamsonLogo size={26} color="#facc15" />,
+    name: "Самсон",
+    accent: "#facc15",
+    petals: [
+      { label: "Статус", value: "Партнёр" },
+      { label: "Стиль", value: "Борьба" },
+    ],
+  },
+];
 
 // ── Component props ──────────────────────────────────────────────────────────
 
@@ -365,15 +407,46 @@ export function OctagonWidget({
         y={p0y}
       />
 
-      {/* Face 2 — PROMOTIONS */}
-      <StatPod
-        label="Промо"
-        value={promoLine}
-        accent={CYAN}
-        align={FACE_ALIGN[1]}
-        x={p1x}
-        y={p1y}
-      />
+      {/* Face 2 — PROMOTIONS with Lotus effect */}
+      <div
+        className="absolute"
+        style={{ left: p1x, top: p1y, transform: "translate(-50%, -50%)", zIndex: 30 }}
+      >
+        <PromotionsRow
+          items={[
+            {
+              logo: <AcaLogo size={26} color={AMBER} />,
+              name: "ACA",
+              accent: AMBER,
+              petals: [
+                { label: "Организация", value: "Absolute Championship Akhmat" },
+                { label: "Статус", value: "Действующий контракт" },
+                { label: "Рекорд в лиге", value: "5-2" },
+              ],
+            },
+            {
+              logo: <RccLogo size={26} color="#f87171" />,
+              name: "RCC",
+              accent: "#f87171",
+              petals: [
+                { label: "Организация", value: "Russian Cagefighting" },
+                { label: "Статус", value: "Ветеран" },
+                { label: "Выступлений", value: "7" },
+              ],
+            },
+            {
+              logo: <M1Logo size={26} color={CYAN} />,
+              name: "M-1 Global",
+              accent: CYAN,
+              petals: [
+                { label: "Организация", value: "M-1 Global" },
+                { label: "Статус", value: "Ветеран" },
+                { label: "Выступлений", value: "12" },
+              ],
+            },
+          ]}
+        />
+      </div>
 
       {/* Face 3 — WEIGHT */}
       <StatPod
@@ -396,15 +469,33 @@ export function OctagonWidget({
         y={p3y}
       />
 
-      {/* Face 5 — CLUB */}
-      <StatPod
-        label="Клуб"
-        value={club}
-        accent={CYAN}
-        align={FACE_ALIGN[4]}
-        x={p4x}
-        y={p4y}
-      />
+      {/* Face 5 — CLUB with Lotus effect */}
+      <div
+        className="absolute flex flex-col items-center gap-1"
+        style={{ left: p4x, top: p4y, transform: "translate(-50%, -50%)", zIndex: 30 }}
+      >
+        <LotusIcon
+          name="Кузня"
+          accent={CYAN}
+          size={32}
+          radius={60}
+          angleOffset={90}
+          petals={[
+            { label: "Главный тренер", value: "Олег Владимирович" },
+            { label: "Специализация", value: "MMA · Кикбоксинг" },
+            { label: "Залы", value: "Анапа / Краснодар" },
+            { label: "Про с", value: "2013" },
+          ]}
+        >
+          <KuzniaLogo size={28} color={CYAN} />
+        </LotusIcon>
+        <span
+          className="font-[family-name:var(--font-geist-mono)] text-[8px] font-semibold uppercase tracking-[0.28em]"
+          style={{ color: CYAN, opacity: 0.7 }}
+        >
+          {club}
+        </span>
+      </div>
 
       {/* Face 6 — STYLE */}
       <StatPod
