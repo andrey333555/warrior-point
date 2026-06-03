@@ -29,6 +29,16 @@ export type NetworkTier =
   | "kickbox"
   | "independent";
 
+export type FeaturedAthlete = {
+  /** Matches profiles.id */
+  profileId: string;
+  displayName: string;
+  /** e.g. "MMA · Featherweight" */
+  label: string;
+  /** 'Pro' | 'Amateur' | 'Coach' */
+  status: string;
+};
+
 export type GymEntry = {
   id: string;
   name: string;
@@ -42,6 +52,8 @@ export type GymEntry = {
   coachName: string;
   /** Martial arts disciplines offered. */
   specializations: string[];
+  /** Key athletes / trainers to feature in the map popup. */
+  featuredAthletes?: FeaturedAthlete[];
   phone?: string;
   instagram?: string;
   website?: string;
@@ -65,6 +77,14 @@ const KUZNYA_GYMS: GymEntry[] = [
     coachId: "WP-COACH-001",
     coachName: "Сергей Романов",
     specializations: ["MMA", "Кикбоксинг", "Бокс"],
+    featuredAthletes: [
+      {
+        profileId: "WP-INTL-X9-441K",
+        displayName: "Виктор Колесник",
+        label: "MMA · Featherweight",
+        status: "Pro",
+      },
+    ],
     instagram: "@kuznya_krd",
     accent: "cyan",
   },
@@ -108,6 +128,14 @@ const KUZNYA_GYMS: GymEntry[] = [
     coachId: "WP-COACH-001",
     coachName: "Сергей Романов",
     specializations: ["MMA", "Кикбоксинг", "Тайский бокс"],
+    featuredAthletes: [
+      {
+        profileId: "WP-INTL-X9-441K",
+        displayName: "Виктор Колесник",
+        label: "MMA · Featherweight · 66 кг",
+        status: "Pro",
+      },
+    ],
     instagram: "@kuznya_anapa",
     accent: "emerald",
   },

@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import type { GymEntry } from "@/lib/gyms";
+import type { GymEntry, FeaturedAthlete } from "@/lib/gyms";
 import { CATEGORY_LABELS, GYM_ACCENT_HEX, NETWORK_LABELS } from "@/lib/gyms";
 
 type GymPopupProps = {
@@ -208,6 +208,52 @@ export function GymPopup({ gym, anchor, onClose }: GymPopupProps) {
         )}
 
         <hr className="my-3 border-white/[0.07]" />
+
+        {/* Featured athletes */}
+        {gym.featuredAthletes && gym.featuredAthletes.length > 0 && (
+          <div className="mb-3 rounded-xl border border-white/[0.06] bg-black/40 px-3 py-2.5">
+            <p className="font-[family-name:var(--font-geist-mono)] text-[9px] font-semibold uppercase tracking-[0.28em] text-zinc-500">
+              Бойцы клуба
+            </p>
+            <ul className="mt-2 space-y-2">
+              {gym.featuredAthletes.map((athlete: FeaturedAthlete) => (
+                <li key={athlete.profileId} className="flex items-center gap-2.5">
+                  {/* Mini hex avatar */}
+                  <div
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border font-[family-name:var(--font-geist-mono)] text-[9px] font-bold uppercase text-white"
+                    style={{
+                      borderColor: `${hexColor}50`,
+                      background: `${hexColor}14`,
+                      boxShadow: `0 0 10px -4px ${hexColor}`,
+                    }}
+                  >
+                    {initials(athlete.displayName)}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate font-[family-name:var(--font-geist-mono)] text-[10.5px] uppercase tracking-[0.1em] text-zinc-100">
+                      {athlete.displayName}
+                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className="rounded-full border px-1.5 py-[1px] font-[family-name:var(--font-geist-mono)] text-[7.5px] font-semibold uppercase tracking-[0.22em]"
+                        style={{
+                          borderColor: `${hexColor}45`,
+                          background: `${hexColor}10`,
+                          color: hexColor,
+                        }}
+                      >
+                        {athlete.status}
+                      </span>
+                      <span className="font-[family-name:var(--font-geist-mono)] text-[8.5px] uppercase tracking-[0.1em] text-zinc-600">
+                        {athlete.label}
+                      </span>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Active splits */}
         <div className="mb-3 rounded-xl border border-white/[0.05] bg-black/40 px-3 py-2">

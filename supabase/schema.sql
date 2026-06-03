@@ -81,13 +81,17 @@ CREATE INDEX IF NOT EXISTS fighter_awards_fighter_idx
 -- auth.uid()). `role` is constrained to the three Warrior Point personas; `coach_id`
 -- links a fighter to the coach who manages them.
 CREATE TABLE IF NOT EXISTS public.profiles (
-  id TEXT PRIMARY KEY,
-  display_name TEXT,
-  role TEXT NOT NULL DEFAULT 'fighter'
-    CHECK (role IN ('admin', 'coach', 'fighter')),
-  coach_id TEXT REFERENCES public.profiles (id) ON DELETE SET NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id             TEXT PRIMARY KEY,
+  display_name   TEXT,
+  role           TEXT NOT NULL DEFAULT 'fighter'
+                   CHECK (role IN ('admin', 'coach', 'fighter')),
+  coach_id       TEXT REFERENCES public.profiles (id) ON DELETE SET NULL,
+  club           TEXT,
+  specialization TEXT,
+  weight_class   TEXT,
+  fighter_status TEXT,   -- 'Pro' | 'Amateur' | 'Coach' | 'Admin'
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Idempotent additions for existing installs:
@@ -95,6 +99,14 @@ ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'fighter';
 ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS coach_id TEXT;
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS club TEXT;
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS specialization TEXT;
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS weight_class TEXT;
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS fighter_status TEXT;
 
 -- Enforce the role whitelist (drop+recreate so re-runs stay clean):
 ALTER TABLE public.profiles
@@ -150,17 +162,20 @@ CREATE POLICY "warrior_anon_profiles_write"
   WITH CHECK (true);
 
 -- ───────────────────────── Seed demo personas ─────────────────────────
--- Admin (you), one coach, and the demo fighter Виктор Колесник linked to that coach.
-INSERT INTO public.profiles (id, display_name, role, coach_id)
+INSERT INTO public.profiles (id, display_name, role, coach_id, club, specialization, weight_class, fighter_status)
 VALUES
-  ('WP-ADMIN-001', 'Warrior Point Admin', 'admin', NULL),
-  ('WP-COACH-001', 'Head Coach', 'coach', NULL),
-  ('WP-INTL-X9-441K', 'Виктор Колесник', 'fighter', 'WP-COACH-001')
+  ('WP-ADMIN-001',    'Warrior Point Admin', 'admin',   NULL,           NULL,                            NULL,                                    NULL,                                  'Admin'),
+  ('WP-COACH-001',    'Сергей Романов',      'coach',   NULL,           'БК «Кузня»',                   'MMA · Тренер',                          NULL,                                  'Coach'),
+  ('WP-INTL-X9-441K', 'Виктор Колесник',    'fighter', 'WP-COACH-001', 'БК «Кузня» (Анапа / Краснодар)', 'MMA · Комплексные единоборства',      'Featherweight · Полулегкий вес (66 кг)', 'Pro')
 ON CONFLICT (id) DO UPDATE
-  SET display_name = EXCLUDED.display_name,
-      role = EXCLUDED.role,
-      coach_id = EXCLUDED.coach_id,
-      updated_at = NOW();
+  SET display_name   = EXCLUDED.display_name,
+      role           = EXCLUDED.role,
+      coach_id       = EXCLUDED.coach_id,
+      club           = EXCLUDED.club,
+      specialization = EXCLUDED.specialization,
+      weight_class   = EXCLUDED.weight_class,
+      fighter_status = EXCLUDED.fighter_status,
+      updated_at     = NOW();
 
 -- Refresh PostgREST schema cache so new columns resolve immediately
 -- (clears the orange schema-cache error at the bottom of the app).
