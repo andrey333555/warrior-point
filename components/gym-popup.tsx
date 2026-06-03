@@ -233,7 +233,7 @@ export function GymPopup({ gym, anchor, onClose }: GymPopupProps) {
                     <p className="truncate font-[family-name:var(--font-geist-mono)] text-[10.5px] uppercase tracking-[0.1em] text-zinc-100">
                       {athlete.displayName}
                     </p>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <span
                         className="rounded-full border px-1.5 py-[1px] font-[family-name:var(--font-geist-mono)] text-[7.5px] font-semibold uppercase tracking-[0.22em]"
                         style={{
@@ -248,6 +248,11 @@ export function GymPopup({ gym, anchor, onClose }: GymPopupProps) {
                         {athlete.label}
                       </span>
                     </div>
+                    {athlete.promotions && (
+                      <p className="mt-0.5 font-[family-name:var(--font-geist-mono)] text-[8px] uppercase tracking-[0.14em] text-zinc-700">
+                        {athlete.promotions}
+                      </p>
+                    )}
                   </div>
                 </li>
               ))}

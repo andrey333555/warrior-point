@@ -33,10 +33,12 @@ export type FeaturedAthlete = {
   /** Matches profiles.id */
   profileId: string;
   displayName: string;
-  /** e.g. "MMA · Featherweight" */
+  /** e.g. "MMA · Featherweight · 66 кг" */
   label: string;
   /** 'Pro' | 'Amateur' | 'Coach' */
   status: string;
+  /** Short promo line shown under the label, e.g. "ACA · RCC · M-1 Global" */
+  promotions?: string;
 };
 
 export type GymEntry = {
@@ -81,8 +83,9 @@ const KUZNYA_GYMS: GymEntry[] = [
       {
         profileId: "WP-INTL-X9-441K",
         displayName: "Виктор Колесник",
-        label: "MMA · Featherweight",
+        label: "MMA · Featherweight / Lightweight",
         status: "Pro",
+        promotions: "ACA · RCC · M-1 Global · Marathon 360",
       },
     ],
     instagram: "@kuznya_krd",
@@ -132,8 +135,9 @@ const KUZNYA_GYMS: GymEntry[] = [
       {
         profileId: "WP-INTL-X9-441K",
         displayName: "Виктор Колесник",
-        label: "MMA · Featherweight · 66 кг",
+        label: "Featherweight 66 кг · Lightweight 70.3 кг",
         status: "Pro",
+        promotions: "ACA · RCC · M-1 Global · Marathon 360",
       },
     ],
     instagram: "@kuznya_anapa",
