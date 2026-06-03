@@ -30,7 +30,12 @@ import {
   DEMO_FIGHTER_DISPLAY_ID,
   DEMO_FIGHTER_DISPLAY_NAME,
   DEMO_FIGHTER_INITIALS,
+  DEMO_FIGHTER_CLUB,
+  DEMO_FIGHTER_PROMOTIONS,
+  DEMO_FIGHTER_WEIGHT_CLASS,
 } from "@/lib/warrior-constants";
+import { OctagonWidget } from "@/components/octagon-widget";
+import { DailyStreak } from "@/components/daily-streak";
 import { CyberStatTile } from "@/components/cyber-stat-tile";
 import { CyberTabs, type CyberTabDef } from "@/components/cyber-tabs";
 import { EloBar } from "@/components/elo-bar";
@@ -347,124 +352,22 @@ export function WarriorPassport() {
               Warrior Passport
             </p>
 
-            <div className="mt-5 flex flex-col items-center gap-6 sm:flex-row sm:items-center sm:gap-8">
-              <HexCluster
-                centerSize={156}
-                gap={4}
-                center={({ size }) => (
-                  <HexAvatar
-                    initials={DEMO_FIGHTER_INITIALS || "ВК"}
-                    level={level}
-                    maxLevel={MAX_LEVEL}
-                    size={size}
-                    pulse={!remoteBootstrapped || sessionSyncBusy}
-                    showTierBadge={false}
-                  />
-                )}
-                cells={
-                  [
-                    /**
-                     * Core orbit — locked to the right-hand grains of the
-                     * pointy-top core (faces 5 → top-right, 1 → bottom-right).
-                     * Every sotka is `centerSize / φ` so the whole composition
-                     * reads as one piece of jewellery.
-                     */
-                    ...(isWinner
-                      ? ([
-                          {
-                            id: "winner",
-                            face: 4,
-                            render: ({ size }) => (
-                              <HexBadge
-                                accent="gold"
-                                topLabel="Winner"
-                                primary={<span aria-hidden>★</span>}
-                                secondary="of the month"
-                                size={size}
-                              />
-                            ),
-                          },
-                        ] satisfies SotkaSlot[])
-                      : []),
-                    {
-                      id: "level",
-                      face: 5,
-                      render: ({ size }) => (
-                        <div data-hex-trigger>
-                          <HexBadge
-                            accent="pink"
-                            topLabel="Level"
-                            primary={
-                              <span className="tabular-nums">
-                                {String(level).padStart(2, "0")}
-                              </span>
-                            }
-                            secondary={`/ ${MAX_LEVEL}`}
-                            size={size}
-                            onClick={() =>
-                              setHexOpen((s) =>
-                                s === "level" ? null : "level",
-                              )
-                            }
-                            active={hexOpen === "level"}
-                            ariaExpanded={hexOpen === "level"}
-                            ariaControls="hex-popover-level"
-                          />
-                        </div>
-                      ),
-                    },
-                    {
-                      id: "record",
-                      face: 1,
-                      render: ({ size }) => (
-                        <div data-hex-trigger>
-                          <HexBadge
-                            accent="green"
-                            topLabel="Record"
-                            primary={
-                              <span className="tabular-nums">
-                                {liveRecord.wins}
-                                <span className="text-zinc-500">–</span>
-                                {liveRecord.losses}
-                              </span>
-                            }
-                            secondary="W · L"
-                            size={size}
-                            onClick={() =>
-                              setHexOpen((s) =>
-                                s === "record" ? null : "record",
-                              )
-                            }
-                            active={hexOpen === "record"}
-                            ariaExpanded={hexOpen === "record"}
-                            ariaControls="hex-popover-record"
-                          />
-                        </div>
-                      ),
-                    },
-                    /**
-                     * Future slots — Fibonacci / golden-angle spiral around the core.
-                     * Drop in `{ rank: 1, accent: "gold", … }` for first gift, then
-                     * 2, 3, … for streak / boost / VIP perks. The cluster handles
-                     * positioning automatically (Vogel phyllotaxis, 137.508° step).
-                     *
-                     * Example template:
-                     * {
-                     *   id: "gift-1",
-                     *   rank: 1,
-                     *   render: ({ size }) => (
-                     *     <HexBadge
-                     *       accent="gold"
-                     *       topLabel="Gift"
-                     *       primary={<span>◆</span>}
-                     *       secondary="bonus"
-                     *       size={size}
-                     *     />
-                     *   ),
-                     * },
-                     */
-                  ] satisfies SotkaSlot[]
-                }
+            <div className="mt-5 flex flex-col items-center gap-6">
+              {/* ── Octagon fighter card — 8 faces, stat pods, video centre ── */}
+              <OctagonWidget
+                initials={DEMO_FIGHTER_INITIALS || "ВК"}
+                wins={26}
+                losses={4}
+                draws={1}
+                weightClass="FW / LW"
+                level={level}
+                elo={SHOWCASE.elo}
+                club="Кузня"
+                style="MMA"
+                proSince={2013}
+                promotions={DEMO_FIGHTER_PROMOTIONS.split(" · ")}
+                streak={4}
+                isWinner={isWinner}
               />
 
               <div className="min-w-0 flex-1 text-center sm:text-left">
@@ -998,6 +901,13 @@ function OverviewTab(props: {
 
   return (
     <div className="space-y-4">
+      {/* Dopamine Machine — Daily Streak anti-churn widget */}
+      <DailyStreak
+        streak={4}
+        lastSessionAt={new Date(Date.now() - 2 * 24 * 3600 * 1000)}
+        firstStrikeEarned={true}
+      />
+
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
         <CyberStatTile
           label="Total Sessions"
