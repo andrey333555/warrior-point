@@ -218,27 +218,43 @@ export function LotusIcon({
 
 // ── Convenience wrappers ──────────────────────────────────────────────────────
 
-/** A horizontal row of LotusIcons for the Promotions pod. */
-export function PromotionsRow({
-  items,
-}: {
-  items: {
-    logo: React.ReactNode;
-    name: string;
-    accent: string;
-    petals: LotusPetal[];
-  }[];
-}) {
+type PromotionItem = {
+  logo: React.ReactNode;
+  name: string;
+  accent: string;
+  petals: LotusPetal[];
+};
+
+/**
+ * PromotionsRow — grid of LotusIcons for the Promotions pod.
+ *
+ * Layout rules:
+ *   ≤ 3 items → single row
+ *   4 items   → 2 × 2 grid
+ *   5+ items  → flex-wrap, max 3 per row
+ */
+export function PromotionsRow({ items }: { items: PromotionItem[] }) {
+  const is2x2 = items.length === 4;
+  const iconSize = items.length > 3 ? 26 : 30;
+  const gap = items.length > 3 ? 6 : 10;
+  const petalRadius = items.length > 3 ? 46 : 52;
+
   return (
-    <div className="flex items-center gap-2.5">
+    <div
+      className="flex flex-wrap items-center justify-center"
+      style={{
+        gap,
+        maxWidth: is2x2 ? iconSize * 2 + gap : "none",
+      }}
+    >
       {items.map((item) => (
         <LotusIcon
           key={item.name}
           name={item.name}
           accent={item.accent}
           petals={item.petals}
-          size={30}
-          radius={52}
+          size={iconSize}
+          radius={petalRadius}
           angleOffset={90}
           closeOnOutside
         >

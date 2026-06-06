@@ -239,6 +239,139 @@ export function SamsonLogo({ size = 28, color = "#facc15", className }: LogoProp
   );
 }
 
+// ── Additional promotion logos ─────────────────────────────────────────────────
+
+/** AMC Fight Nights — crossed gloves inside diamond */
+export function AmcLogo({ size = 28, color = "#34d399", className }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 32 32"
+      width={size}
+      height={size}
+      className={className}
+      aria-label="AMC Fight Nights"
+    >
+      {/* Diamond frame */}
+      <polygon
+        points="16,2 30,16 16,30 2,16"
+        fill="none"
+        stroke={color}
+        strokeWidth="1.3"
+        opacity="0.65"
+      />
+      <polygon
+        points="16,5.5 26.5,16 16,26.5 5.5,16"
+        fill={color}
+        fillOpacity="0.07"
+      />
+      {/* A */}
+      <path d="M7 22 L10.5 12 L14 22 M8.5 18h4" stroke={color} strokeWidth="1.2" fill="none" strokeLinecap="round"/>
+      {/* M */}
+      <path d="M15 22V13l3.5 5 3.5-5v9" stroke={color} strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+      {/* C bottom label */}
+      <path d="M10 25.5 Q16 28 22 25.5" fill="none" stroke={color} strokeWidth="0.9" strokeLinecap="round" opacity="0.5"/>
+    </svg>
+  );
+}
+
+/** Top Dog — wolf head silhouette */
+export function TopDogLogo({ size = 28, color = "#fb7185", className }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 32 32"
+      width={size}
+      height={size}
+      className={className}
+      aria-label="Top Dog"
+    >
+      {/* Pentagon / fight-pit frame */}
+      <polygon
+        points="16,2 29,11 24,27 8,27 3,11"
+        fill="none"
+        stroke={color}
+        strokeWidth="1.3"
+        opacity="0.6"
+      />
+      {/* T */}
+      <line x1="7" y1="12" x2="13.5" y2="12" stroke={color} strokeWidth="1.4" strokeLinecap="round"/>
+      <line x1="10.5" y1="12" x2="10.5" y2="22" stroke={color} strokeWidth="1.4" strokeLinecap="round"/>
+      {/* D */}
+      <path d="M15 12h3.5c3.5 0 4 2 4 5s-0.5 5-4 5H15V12z"
+        fill={color} fillOpacity="0.12" stroke={color} strokeWidth="1.2" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+/** Hardcore MMA — jagged lightning bolt inside hexagon */
+export function HardcoreLogo({ size = 28, color = "#e879f9", className }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 32 32"
+      width={size}
+      height={size}
+      className={className}
+      aria-label="Hardcore MMA"
+    >
+      {/* Hexagon */}
+      <polygon
+        points="16,2 27,8.5 27,23.5 16,30 5,23.5 5,8.5"
+        fill="none"
+        stroke={color}
+        strokeWidth="1.3"
+        opacity="0.65"
+      />
+      <polygon
+        points="16,5 24.5,10 24.5,22 16,27 7.5,22 7.5,10"
+        fill={color}
+        fillOpacity="0.07"
+      />
+      {/* Lightning bolt */}
+      <path
+        d="M18 5 L11 17 L16 17 L14 27 L21 15 L16 15 Z"
+        fill={color}
+        fillOpacity="0.55"
+        stroke={color}
+        strokeWidth="0.6"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** Наше Дело — Slavic knotwork / fist-and-star */
+export function NasheDeloLogo({ size = 28, color = "#60a5fa", className }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 32 32"
+      width={size}
+      height={size}
+      className={className}
+      aria-label="Наше Дело"
+    >
+      {/* Outer ring */}
+      <circle cx="16" cy="16" r="13" fill="none" stroke={color} strokeWidth="1.3" opacity="0.6"/>
+      <circle cx="16" cy="16" r="9" fill={color} fillOpacity="0.07"/>
+      {/* Star of 6 */}
+      <polygon
+        points="16,5 18.5,12 26,12 20,17 22.5,24 16,20 9.5,24 12,17 6,12 13.5,12"
+        fill={color}
+        fillOpacity="0.25"
+        stroke={color}
+        strokeWidth="0.8"
+        opacity="0.75"
+      />
+      {/* Н · Д */}
+      <line x1="12" y1="13" x2="12" y2="19" stroke={color} strokeWidth="1.3" strokeLinecap="round"/>
+      <line x1="16" y1="13" x2="16" y2="19" stroke={color} strokeWidth="1.3" strokeLinecap="round"/>
+      <line x1="12" y1="16" x2="16" y2="16" stroke={color} strokeWidth="1.3" strokeLinecap="round"/>
+      {/* tiny separator dot */}
+      <circle cx="18" cy="16" r="0.8" fill={color} opacity="0.5"/>
+      {/* Д */}
+      <path d="M19 19 L19 13 L23 13 L23 19 M17.5 19 L24.5 19" stroke={color} strokeWidth="1.1" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
 /** Generic placeholder for unknown clubs */
 export function ClubPlaceholderLogo({ size = 28, color = "#71717a", className }: LogoProps) {
   return (

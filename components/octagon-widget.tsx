@@ -1,5 +1,7 @@
 "use client";
 
+import React from "react";
+
 /**
  * OctagonWidget — 8-face UFC-style octagon fighter card.
  *
@@ -26,11 +28,21 @@ import {
   AcaLogo,
   RccLogo,
   M1Logo,
+  Marathon360Logo,
+  AmcLogo,
+  HardcoreLogo,
+  TopDogLogo,
+  NasheDeloLogo,
   KuzniaLogo,
   NartLogo,
   BulldogLogo,
   SamsonLogo,
 } from "@/components/org-logos";
+import {
+  buildOrgPetals,
+  findOrg,
+  getViktorOrgRecord,
+} from "@/data/organisations";
 
 // ── Geometry constants ────────────────────────────────────────────────────────
 
@@ -101,6 +113,58 @@ const CYAN    = "#22d3ee";
 const FUCHSIA = "#e879f9";
 const AMBER   = "#facc15";
 const EMERALD = "#34d399";
+
+// ── Promotion logo map ────────────────────────────────────────────────────────
+
+/** Renders the correct SVG logo for a known promotion id. */
+function OrgLogo({
+  orgId,
+  size,
+  color,
+}: {
+  orgId: string;
+  size: number;
+  color: string;
+}) {
+  switch (orgId) {
+    case "aca":         return <AcaLogo         size={size} color={color} />;
+    case "rcc":         return <RccLogo         size={size} color={color} />;
+    case "m1":          return <M1Logo          size={size} color={color} />;
+    case "marathon360": return <Marathon360Logo size={size} color={color} />;
+    case "amc":         return <AmcLogo         size={size} color={color} />;
+    case "hardcore":    return <HardcoreLogo    size={size} color={color} />;
+    case "topdog":      return <TopDogLogo      size={size} color={color} />;
+    case "nashedelo":   return <NasheDeloLogo   size={size} color={color} />;
+    default:            return <AcaLogo         size={size} color={color} />;
+  }
+}
+
+/** Viktor's 4 confirmed promotion ids in display order. */
+const VIKTOR_PROMO_IDS = ["aca", "rcc", "m1", "marathon360"] as const;
+
+/**
+ * Builds the PromotionsRow items array for Viktor's promotions.
+ * Each item has: logo, name, accent, petals from real org records.
+ */
+function buildViktorPromoItems(iconSize: number) {
+  return VIKTOR_PROMO_IDS.map((id) => {
+    const org = findOrg(id);
+    if (!org) return null;
+    const record = getViktorOrgRecord(id);
+    const petals = buildOrgPetals(org, record);
+    return {
+      logo: <OrgLogo orgId={id} size={iconSize} color={org.accent} />,
+      name: org.shortName,
+      accent: org.accent,
+      petals,
+    };
+  }).filter(Boolean) as {
+    logo: React.ReactNode;
+    name: string;
+    accent: string;
+    petals: { label: string; value: string }[];
+  }[];
+}
 
 // ── Partner club placeholder data ────────────────────────────────────────────
 
@@ -249,7 +313,8 @@ export function OctagonWidget({
   videoSrc,
   posterUrl,
 }: OctagonWidgetProps) {
-  const promoLine = promotions?.slice(0, 3).join(" · ") ?? "ACA · RCC · M-1";
+  const promoLine = promotions?.slice(0, 4).join(" · ") ?? "ACA · RCC · M-1 · M360";
+  const promoItems = buildViktorPromoItems(24);
 
   const [p0x, p0y] = podPos(0); // top — record
   const [p1x, p1y] = podPos(1); // top-right — promotions
@@ -369,45 +434,18 @@ export function OctagonWidget({
         y={p0y}
       />
 
-      {/* Face 2 — PROMOTIONS with Lotus effect */}
+      {/* Face 2 — PROMOTIONS with Lotus effect (4 icons, data from organisations registry) */}
       <div
-        className="absolute"
+        className="absolute flex flex-col items-start gap-0.5"
         style={{ left: p1x, top: p1y, transform: "translate(-50%, -50%)", zIndex: 30 }}
       >
-        <PromotionsRow
-          items={[
-            {
-              logo: <AcaLogo size={26} color={AMBER} />,
-              name: "ACA",
-              accent: AMBER,
-              petals: [
-                { label: "Организация", value: "Absolute Championship Akhmat" },
-                { label: "Статус", value: "Действующий контракт" },
-                { label: "Рекорд в лиге", value: "5-2" },
-              ],
-            },
-            {
-              logo: <RccLogo size={26} color="#f87171" />,
-              name: "RCC",
-              accent: "#f87171",
-              petals: [
-                { label: "Организация", value: "Russian Cagefighting" },
-                { label: "Статус", value: "Ветеран" },
-                { label: "Выступлений", value: "7" },
-              ],
-            },
-            {
-              logo: <M1Logo size={26} color={CYAN} />,
-              name: "M-1 Global",
-              accent: CYAN,
-              petals: [
-                { label: "Организация", value: "M-1 Global" },
-                { label: "Статус", value: "Ветеран" },
-                { label: "Выступлений", value: "12" },
-              ],
-            },
-          ]}
-        />
+        <PromotionsRow items={promoItems} />
+        <span
+          className="mx-auto font-[family-name:var(--font-geist-mono)] text-[7px] uppercase tracking-[0.28em]"
+          style={{ color: AMBER, opacity: 0.55 }}
+        >
+          Промо
+        </span>
       </div>
 
       {/* Face 3 — WEIGHT */}

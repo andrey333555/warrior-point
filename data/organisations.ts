@@ -152,6 +152,20 @@ export const ORGANISATIONS: readonly OrgEntry[] = [
       { label: "Последний бой",      key: "lastFight",           defaultValue: "—" },
     ],
   },
+  {
+    id: "nashedelo",
+    name: "Наше Дело",
+    shortName: "НД",
+    accent: "#60a5fa",
+    country: "RU",
+    logoKey: "NasheDeloLogo",
+    petalSchema: [
+      { label: "Рекорд в лиге",      key: "leagueRecord",        defaultValue: "—" },
+      { label: "Статус контракта",   key: "contractStatus",      defaultValue: "—" },
+      { label: "Последний бой",      key: "lastFight",           defaultValue: "—" },
+      { label: "Формат",             key: "format",              defaultValue: "Народный ММА" },
+    ],
+  },
 ] as const;
 
 // ── Viktor Kolesnik's org records ─────────────────────────────────────────────
