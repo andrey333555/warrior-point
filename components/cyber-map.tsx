@@ -23,7 +23,12 @@ import {
   type GymEntry,
   type GymFilter,
 } from "@/lib/gyms";
-import { CITY_REGISTRY, findCityByName } from "@/lib/cities";
+import { CITY_REGISTRY, findCityByName, type CityEntry } from "@/lib/cities";
+import {
+  getBrowserPosition,
+  resolveHubFromCoords,
+  defaultHubCity,
+} from "@/lib/geo";
 import { GymPopup } from "./gym-popup";
 import "leaflet/dist/leaflet.css";
 import type * as L from "leaflet";
@@ -91,18 +96,26 @@ const GPS_TOOLTIP: Record<GpsState, string> = {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function CyberMap() {
+export default function CyberMap({
+  clientId,
+  onBooked,
+}: {
+  clientId?: string;
+  onBooked?: (msg: string) => void;
+} = {}) {
   const mapRef     = useRef<HTMLDivElement>(null);
   const leafletMap = useRef<L.Map | null>(null);
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
   const gpsMarker  = useRef<L.Marker | null>(null);
 
   const [selectedGym,     setSelectedGym]     = useState<GymEntry | null>(null);
-  const [popupAnchor,     setPopupAnchor]      = useState<{ x: number; y: number } | null>(null);
   const [activeCategory,  setActiveCategory]   = useState<GymCategory | "all">("all");
   const [activeCity,      setActiveCity]       = useState<string | null>(null);
   const [gpsState,        setGpsState]         = useState<GpsState>("idle");
   const [cityOpen,        setCityOpen]         = useState(false);
+  const [geoEcho,         setGeoEcho]          = useState<string | null>(null);
+  const [mapReady,        setMapReady]         = useState(false);
+  const autoGeoDone       = useRef(false);
 
   const filter: GymFilter = useMemo(
     () => ({
@@ -117,21 +130,57 @@ export default function CyberMap() {
     [filter],
   );
 
+  const flyToCity = useCallback((city: CityEntry, zoom?: number) => {
+    leafletMap.current?.flyTo(
+      [city.lat, city.lng],
+      zoom ?? city.zoom,
+      { animate: true, duration: 1.2 },
+    );
+  }, []);
+
+  const applyHub = useCallback(
+    (city: CityEntry, opts: { filter?: boolean; echo?: string } = {}) => {
+      const { filter = true, echo } = opts;
+      if (filter) {
+        const hasActiveGyms = ACTIVE_GYMS.some((g) => g.city === city.name);
+        setActiveCity(hasActiveGyms ? city.name : null);
+      }
+      flyToCity(city);
+      if (echo) {
+        setGeoEcho(echo);
+        setTimeout(() => setGeoEcho(null), 3500);
+      }
+    },
+    [flyToCity],
+  );
+
   // ── Init Leaflet (once) ───────────────────────────────────────────────────
 
   useEffect(() => {
     if (!mapRef.current || leafletMap.current) return;
+
+    let aborted = false;
     let map: L.Map | null = null;
 
     void (async () => {
       const L = (await import("leaflet")).default;
 
-      map = L.map(mapRef.current!, {
+      if (aborted || !mapRef.current) return;
+
+      // Clear any leftover _leaflet_id from a previous hot-reload cycle
+      const container = mapRef.current as HTMLDivElement & { _leaflet_id?: unknown };
+      if (container._leaflet_id !== undefined) {
+        delete container._leaflet_id;
+      }
+
+      map = L.map(mapRef.current, {
         center: [44.95, 38.2],
         zoom: 7,
         zoomControl: false,
         attributionControl: false,
       });
+
+      if (aborted) { map.remove(); return; }
       leafletMap.current = map;
 
       L.tileLayer(
@@ -149,23 +198,62 @@ export default function CyberMap() {
         marker.addTo(map!);
         markersRef.current.set(gym.id, marker);
 
-        marker.on("click", (e: L.LeafletMouseEvent) => {
+        marker.on("click", () => {
           setSelectedGym(gym);
-          const pt = map!.latLngToContainerPoint(e.latlng);
-          setPopupAnchor({ x: pt.x, y: pt.y });
         });
       });
 
-      map.on("click", () => { setSelectedGym(null); setPopupAnchor(null); });
+      map.on("click", () => { setSelectedGym(null); });
+
+      setMapReady(true);
     })();
 
     return () => {
+      aborted = true;
       map?.remove();
       leafletMap.current = null;
       markersRef.current.clear();
       gpsMarker.current = null;
     };
   }, []);
+
+  // ── Auto-geolocation on first open ────────────────────────────────────────
+
+  useEffect(() => {
+    if (!mapReady || !leafletMap.current || autoGeoDone.current) return;
+    autoGeoDone.current = true;
+
+    void (async () => {
+      setGpsState("loading");
+      try {
+        const pos = await getBrowserPosition();
+        const { latitude: lat, longitude: lng } = pos.coords;
+        const { city, matched } = resolveHubFromCoords(lat, lng);
+
+        const L = (await import("leaflet")).default;
+        const map = leafletMap.current;
+        if (map) {
+          if (gpsMarker.current) map.removeLayer(gpsMarker.current);
+          const dot = L.marker([lat, lng], { icon: makeGpsDot(L), zIndexOffset: 500 });
+          dot.addTo(map);
+          gpsMarker.current = dot;
+        }
+
+        applyHub(city, {
+          filter: true,
+          echo: matched
+            ? `Хаб · ${city.name.toUpperCase()}`
+            : `По умолчанию · ${city.name.toUpperCase()}`,
+        });
+        setGpsState("success");
+        setTimeout(() => setGpsState("idle"), 3000);
+      } catch {
+        const fallback = defaultHubCity();
+        applyHub(fallback, { filter: true, echo: `GPS выкл · ${fallback.name.toUpperCase()}` });
+        setGpsState("idle");
+      }
+    })();
+  }, [applyHub, mapReady]);
 
   // ── Show / hide markers on filter change ─────────────────────────────────
 
@@ -179,7 +267,6 @@ export default function CyberMap() {
     });
     if (selectedGym && !visibleIds.has(selectedGym.id)) {
       setSelectedGym(null);
-      setPopupAnchor(null);
     }
   }, [visibleIds, selectedGym]);
 
@@ -215,6 +302,13 @@ export default function CyberMap() {
         gpsMarker.current = dot;
 
         map.flyTo([lat, lng], 14, { animate: true, duration: 1.4 });
+
+        const { city, matched } = resolveHubFromCoords(lat, lng);
+        applyHub(city, {
+          filter: true,
+          echo: matched ? `Хаб · ${city.name.toUpperCase()}` : undefined,
+        });
+
         setGpsState("success");
 
         // Reset icon after 4s
@@ -226,43 +320,34 @@ export default function CyberMap() {
       },
       { timeout: 10000, enableHighAccuracy: true },
     );
-  }, []);
+  }, [applyHub]);
 
   // ── City flyTo ────────────────────────────────────────────────────────────
 
   const handleCitySelect = useCallback(
     (cityName: string) => {
       setCityOpen(false);
+      setSelectedGym(null);
 
-      // Filter gyms if city has active ones, else clear filter
       const hasActiveGyms = ACTIVE_GYMS.some((g) => g.city === cityName);
       setActiveCity(hasActiveGyms ? cityName : null);
-      setSelectedGym(null);
-      setPopupAnchor(null);
 
-      // Fly to city centre regardless
       const cityEntry = findCityByName(cityName);
-      if (cityEntry && leafletMap.current) {
-        leafletMap.current.flyTo(
-          [cityEntry.lat, cityEntry.lng],
-          cityEntry.zoom,
-          { animate: true, duration: 1.2 },
-        );
-      }
+      if (cityEntry) flyToCity(cityEntry);
     },
-    [],
+    [flyToCity],
   );
 
   const handleClearCity = useCallback(() => {
     setActiveCity(null);
     setCityOpen(false);
+    setSelectedGym(null);
     leafletMap.current?.flyTo([44.95, 38.2], 7, { animate: true, duration: 1.2 });
   }, []);
 
   const handleCategoryChip = useCallback((id: GymCategory | "all") => {
     setActiveCategory(id);
     setSelectedGym(null);
-    setPopupAnchor(null);
   }, []);
 
   const visibleCount = visibleIds.size;
@@ -509,14 +594,29 @@ export default function CyberMap() {
         })}
       </div>
 
-      {/* Gym popup */}
+      {/* Geo hub echo */}
       <AnimatePresence>
-        {selectedGym && popupAnchor ? (
+        {geoEcho ? (
+          <motion.p
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            className="absolute left-1/2 top-3 z-[1000] -translate-x-1/2 whitespace-nowrap rounded-full border border-cyan-400/30 bg-black/82 px-3 py-1 font-[family-name:var(--font-jetbrains-mono)] text-[9px] font-semibold uppercase tracking-[0.22em] text-cyan-200 backdrop-blur-md"
+          >
+            {geoEcho}
+          </motion.p>
+        ) : null}
+      </AnimatePresence>
+
+      {/* Gym popup — vertical IRON WILL bottom sheet */}
+      <AnimatePresence>
+        {selectedGym ? (
           <GymPopup
             key={selectedGym.id}
             gym={selectedGym}
-            anchor={popupAnchor}
-            onClose={() => { setSelectedGym(null); setPopupAnchor(null); }}
+            clientId={clientId}
+            onBooked={onBooked}
+            onClose={() => setSelectedGym(null)}
           />
         ) : null}
       </AnimatePresence>

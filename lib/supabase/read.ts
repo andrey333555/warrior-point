@@ -347,3 +347,121 @@ export async function fetchMonthlyXpLeaderboard(
       };
     });
 }
+
+// ── ELO leaderboard (profiles + fighter_stats, ordered by elo_rating) ──────────
+
+export type EloLeader = Readonly<{
+  rank: number;
+  fighterSlug: string;
+  displayName: string;
+  totalXp: number;
+  /** Real elo_rating column when present, else derived from total_xp. */
+  elo: number;
+  currentStatus: string | null;
+  isWinner: boolean;
+}>;
+
+/** Derive a stable ELO from XP when the elo_rating column is absent. */
+function deriveElo(totalXp: number): number {
+  return 1400 + Math.round(num(totalXp) / 12);
+}
+
+/**
+ * Top combatants ordered by `elo_rating` DESC (resilient).
+ *
+ * Cascade:
+ *   1. fighter_stats ordered by elo_rating (+ status columns).
+ *   2. Fall back to total_xp ordering if elo_rating / status columns are absent.
+ *   3. Hydrate display names from `profiles.display_name` (best-effort).
+ */
+export async function fetchEloLeaderboard(
+  client: SupabaseClient,
+  opts: { limit?: number } = {},
+): Promise<EloLeader[]> {
+  const { limit = 12 } = opts;
+
+  type StatRow = {
+    fighter_id: string;
+    total_xp?: unknown;
+    elo_rating?: unknown;
+    current_status?: unknown;
+    is_winner?: unknown;
+  };
+
+  let rows: StatRow[] | null = null;
+  let hasEloColumn = true;
+
+  // Attempt 1 — full select ordered by elo_rating
+  const full = await client
+    .from("fighter_stats")
+    .select("fighter_id, total_xp, elo_rating, current_status, is_winner")
+    .order("elo_rating", { ascending: false, nullsFirst: false })
+    .limit(limit);
+
+  if (full.error) {
+    hasEloColumn = false;
+    // Attempt 2 — order by total_xp (no elo_rating / maybe no status cols)
+    const xpOrder = await client
+      .from("fighter_stats")
+      .select("fighter_id, total_xp, current_status, is_winner")
+      .order("total_xp", { ascending: false })
+      .limit(limit);
+
+    if (xpOrder.error) {
+      const legacy = await client
+        .from("fighter_stats")
+        .select("fighter_id, total_xp")
+        .order("total_xp", { ascending: false })
+        .limit(limit);
+      rows = (legacy.data ?? []) as StatRow[];
+    } else {
+      rows = (xpOrder.data ?? []) as StatRow[];
+    }
+  } else {
+    rows = (full.data ?? []) as StatRow[];
+  }
+
+  if (!rows?.length) return [];
+
+  const ids = rows.map((r) => r.fighter_id).filter(Boolean);
+
+  // Hydrate display names from profiles (best-effort)
+  const nameById = new Map<string, string>();
+  if (ids.length) {
+    const { data: profileRows } = await client
+      .from("profiles")
+      .select("id, display_name")
+      .in("id", ids);
+
+    for (const p of profileRows ?? []) {
+      const dn = (p as { display_name?: unknown }).display_name;
+      if (typeof dn === "string" && dn.trim()) {
+        nameById.set(p.id as string, dn);
+      }
+    }
+  }
+
+  return rows.map((r, i) => {
+    const totalXp = num(r.total_xp);
+    const eloRaw = r.elo_rating;
+    const elo =
+      hasEloColumn && typeof eloRaw === "number" && Number.isFinite(eloRaw)
+        ? eloRaw
+        : deriveElo(totalXp);
+
+    const currentStatus =
+      typeof r.current_status === "string" ? r.current_status : null;
+    const isWinner =
+      r.is_winner === true || currentStatus === "Winner of the Month";
+
+    return {
+      rank: i + 1,
+      fighterSlug: r.fighter_id,
+      displayName: nameById.get(r.fighter_id) ?? formatFighterLedgerName(r.fighter_id),
+      totalXp,
+      elo,
+      currentStatus,
+      isWinner,
+    };
+  });
+}

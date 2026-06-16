@@ -220,11 +220,11 @@ type VideoPlayerProps = {
 
 export function VideoPlayer({
   src,
-  posterInitials = "ВК",
+  posterInitials = "ББ",
   accent = "#22d3ee",
   size = 80,
   posterUrl,
-  caption = "Хайлайт Виктора Колесника",
+  caption = "Хайлайт бойца",
 }: VideoPlayerProps) {
   const [open, setOpen] = useState(false);
   const [thumbFailed, setThumbFailed] = useState(false);

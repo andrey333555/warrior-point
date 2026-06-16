@@ -24,12 +24,17 @@ import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LotusIcon, PromotionsRow } from "@/components/lotus-icon";
 import { VideoPlayer } from "@/components/video-player";
+import { MetatronsCube, type MetatronRole } from "@/components/metatrons-cube";
 import {
   AcaLogo,
   RccLogo,
   M1Logo,
   Marathon360Logo,
   AmcLogo,
+  FngLogo,
+  OpenFcLogo,
+  UfcLogo,
+  OneFcLogo,
   HardcoreLogo,
   TopDogLogo,
   NasheDeloLogo,
@@ -41,7 +46,7 @@ import {
 import {
   buildOrgPetals,
   findOrg,
-  getViktorOrgRecord,
+  getDemoFighterOrgRecord,
 } from "@/data/organisations";
 
 // ── Geometry constants ────────────────────────────────────────────────────────
@@ -132,6 +137,10 @@ function OrgLogo({
     case "m1":          return <M1Logo          size={size} color={color} />;
     case "marathon360": return <Marathon360Logo size={size} color={color} />;
     case "amc":         return <AmcLogo         size={size} color={color} />;
+    case "fng":         return <FngLogo         size={size} color={color} />;
+    case "openfc":      return <OpenFcLogo      size={size} color={color} />;
+    case "ufc":         return <UfcLogo         size={size} color={color} />;
+    case "one":         return <OneFcLogo       size={size} color={color} />;
     case "hardcore":    return <HardcoreLogo    size={size} color={color} />;
     case "topdog":      return <TopDogLogo      size={size} color={color} />;
     case "nashedelo":   return <NasheDeloLogo   size={size} color={color} />;
@@ -139,18 +148,14 @@ function OrgLogo({
   }
 }
 
-/** Viktor's 4 confirmed promotion ids in display order. */
-const VIKTOR_PROMO_IDS = ["aca", "rcc", "m1", "marathon360"] as const;
+/** Demo fighter's 4 confirmed promotion ids in display order. */
+const DEMO_PROMO_IDS = ["aca", "rcc", "m1", "marathon360"] as const;
 
-/**
- * Builds the PromotionsRow items array for Viktor's promotions.
- * Each item has: logo, name, accent, petals from real org records.
- */
-function buildViktorPromoItems(iconSize: number) {
-  return VIKTOR_PROMO_IDS.map((id) => {
+function buildDemoPromoItems(iconSize: number) {
+  return DEMO_PROMO_IDS.map((id) => {
     const org = findOrg(id);
     if (!org) return null;
-    const record = getViktorOrgRecord(id);
+    const record = getDemoFighterOrgRecord(id);
     const petals = buildOrgPetals(org, record);
     return {
       logo: <OrgLogo orgId={id} size={iconSize} color={org.accent} />,
@@ -227,6 +232,12 @@ type OctagonWidgetProps = {
   videoSrc?: string;
   /** Optional poster/thumbnail image URL. */
   posterUrl?: string;
+  /** Combat score shown above the in-octagon playlist. */
+  combatScore?: number;
+  /** Replace video centre with Metatron's Cube (click to cycle faces). */
+  showPlaylist?: boolean;
+  /** Role accent palette for the sacred geometry core. */
+  metatronRole?: MetatronRole;
 };
 
 // ── Stat Pod subcomponent ────────────────────────────────────────────────────
@@ -312,9 +323,12 @@ export function OctagonWidget({
   isWinner = false,
   videoSrc,
   posterUrl,
+  combatScore = 92.4,
+  showPlaylist = false,
+  metatronRole = "fighter",
 }: OctagonWidgetProps) {
   const promoLine = promotions?.slice(0, 4).join(" · ") ?? "ACA · RCC · M-1 · M360";
-  const promoItems = buildViktorPromoItems(24);
+  const promoItems = buildDemoPromoItems(24);
 
   const [p0x, p0y] = podPos(0); // top — record
   const [p1x, p1y] = podPos(1); // top-right — promotions
@@ -400,9 +414,9 @@ export function OctagonWidget({
         })}
       </svg>
 
-      {/* ── Centre: VideoPlayer (VK / YouTube / Rutube) ─────────────────── */}
+      {/* ── Centre: video OR combat score + playlist ───────────────────── */}
       <div
-        className="absolute flex items-center justify-center overflow-hidden"
+        className="absolute flex flex-col items-center justify-center overflow-hidden"
         style={{
           left: OFF,
           top: OFF,
@@ -412,13 +426,24 @@ export function OctagonWidget({
           background: `radial-gradient(ellipse at center, ${accent}14 0%, #09090b 70%)`,
         }}
       >
-        <VideoPlayer
-          src={videoSrc}
-          posterInitials={initials}
-          posterUrl={posterUrl}
-          accent={accent}
-          size={OCT}
-        />
+        {showPlaylist ? (
+          <MetatronsCube
+            role={metatronRole}
+            combatScore={combatScore}
+            size={OCT - 12}
+            videoSrc={videoSrc}
+            posterInitials={initials}
+            posterUrl={posterUrl}
+          />
+        ) : (
+          <VideoPlayer
+            src={videoSrc}
+            posterInitials={initials}
+            posterUrl={posterUrl}
+            accent={accent}
+            size={OCT}
+          />
+        )}
       </div>
 
       {/* ── 8 Stat Pods ─────────────────────────────────────────────────── */}

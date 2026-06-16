@@ -9,9 +9,9 @@ import type { TrainingSplit } from "@/lib/splits";
 import {
   fetchSplits,
   createSplit,
-  bookSplitSeat,
   cancelSplit,
 } from "@/lib/supabase/splits-sync";
+import { handleBookSplit } from "@/lib/supabase/split-booking";
 import { SplitCreator } from "@/components/split-creator";
 import { SplitCard } from "@/components/split-card";
 
@@ -96,13 +96,18 @@ export function SplitsBoard({
       if (!client)
         return { activated: false, error: new Error("Supabase not configured") };
 
-      const result = await bookSplitSeat(client, splitId, currentFighterId);
-      if (!result.error) {
+      const result = await handleBookSplit(client, {
+        clientId: currentFighterId,
+        splitId,
+      });
+      if (result.ok) {
         if (result.activated) setEcho("Сплит активирован — бойцы набраны!");
+        else setEcho("Место занято · −2 000 ₽ · +1 streak");
         void refresh();
+        return { activated: result.activated, error: null };
       }
 
-      return { activated: result.activated, error: result.error };
+      return { activated: false, error: new Error(result.message) };
     },
     [client, currentFighterId, refresh],
   );

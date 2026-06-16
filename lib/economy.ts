@@ -1,6 +1,51 @@
 /** Platform commission withheld from every sanctioned settlement (% of gross). */
 export const PLATFORM_COMMISSION_PCT = 19 as const;
 
+// ── Open Marketplace Tariff ────────────────────────────────────────────────────
+
+/**
+ * Result of the open-marketplace tariff calculation.
+ *
+ * Model:
+ *   Trainer/Fighter sets their own `base_price`.
+ *   Platform adds a 19% service fee on top → `total_price` is what the client pays.
+ *   Trainer receives `net_coach_amount` = base_price in full.
+ *   Platform keeps `commission` (insurance + infrastructure).
+ */
+export type MarketplaceTariff = {
+  /** Price the trainer/fighter sets for their service. */
+  basePrice: number;
+  /** Platform commission: base_price × 0.19 (insurance + infrastructure). */
+  commission: number;
+  /** Commission rate, always 19. */
+  commissionPct: typeof PLATFORM_COMMISSION_PCT;
+  /** Client-facing total: base_price + commission. */
+  totalPrice: number;
+  /** Amount the trainer receives in full — equals base_price. */
+  netCoachAmount: number;
+};
+
+/**
+ * Calculate the open-marketplace tariff for a given base price.
+ *
+ * Example: base_price = 2 000 ₽
+ *   commission      = 380 ₽  (19%)
+ *   total_price     = 2 380 ₽ (client pays)
+ *   net_coach_amount = 2 000 ₽ (trainer keeps everything)
+ */
+export function calculateTotalTariff(basePrice: number): MarketplaceTariff {
+  const safe = Number.isFinite(basePrice) ? Math.max(0, basePrice) : 0;
+  const commission = Math.round(safe * (PLATFORM_COMMISSION_PCT / 100));
+
+  return {
+    basePrice: safe,
+    commission,
+    commissionPct: PLATFORM_COMMISSION_PCT,
+    totalPrice: safe + commission,
+    netCoachAmount: safe,
+  };
+}
+
 /** Warrior Point rank ladder length (Grandmaster tier at [`MAX_LEVEL`]). */
 export const MAX_LEVEL = 23 as const;
 

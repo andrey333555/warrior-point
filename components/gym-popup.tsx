@@ -1,294 +1,318 @@
 "use client";
 
-import { motion } from "framer-motion";
-import type { GymEntry, FeaturedAthlete } from "@/lib/gyms";
-import { CATEGORY_LABELS, GYM_ACCENT_HEX, NETWORK_LABELS } from "@/lib/gyms";
+/**
+ * GymPopup — IRON WILL · Stitch vertical bottom sheet.
+ *
+ * Slides up from the bottom of the map frame when a gym hex marker is tapped.
+ * Shows nearest open splits with live seat counts and a neon booking CTA
+ * wired to `handleBookSplit` (19% / 81% fintech flow).
+ */
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import type { GymEntry } from "@/lib/gyms";
+import { CATEGORY_LABELS, GYM_ACCENT_HEX } from "@/lib/gyms";
+import { createWarriorBrowserClient } from "@/lib/supabase/client";
+import { fetchGymSplits, type GymSplit } from "@/lib/supabase/splits-sync";
+import {
+  handleBookSplit,
+  SPLIT_CLIENT_GROSS_RUB,
+} from "@/lib/supabase/split-booking";
 
 type GymPopupProps = {
   gym: GymEntry;
-  anchor: { x: number; y: number };
   onClose: () => void;
+  clientId?: string;
+  onBooked?: (msg: string) => void;
 };
 
-// ── Per-accent styling maps ───────────────────────────────────────────────────
+const fmtRub = new Intl.NumberFormat("ru-RU", {
+  style: "currency",
+  currency: "RUB",
+  maximumFractionDigits: 0,
+});
 
-const ACCENT_TEXT: Record<GymEntry["accent"], string> = {
-  cyan:    "text-cyan-300",
-  fuchsia: "text-fuchsia-300",
-  amber:   "text-amber-300",
-  emerald: "text-emerald-300",
-  violet:  "text-violet-300",
-  rose:    "text-rose-300",
-};
-
-const ACCENT_BORDER: Record<GymEntry["accent"], string> = {
-  cyan:    "border-cyan-400/40",
-  fuchsia: "border-fuchsia-400/40",
-  amber:   "border-amber-400/40",
-  emerald: "border-emerald-400/40",
-  violet:  "border-violet-400/40",
-  rose:    "border-rose-400/40",
-};
-
-const ACCENT_SHADOW: Record<GymEntry["accent"], string> = {
-  cyan:    "shadow-[0_0_40px_-8px_rgba(34,211,238,0.4)]",
-  fuchsia: "shadow-[0_0_40px_-8px_rgba(232,121,249,0.4)]",
-  amber:   "shadow-[0_0_40px_-8px_rgba(250,204,21,0.4)]",
-  emerald: "shadow-[0_0_40px_-8px_rgba(52,211,153,0.4)]",
-  violet:  "shadow-[0_0_40px_-8px_rgba(167,139,250,0.4)]",
-  rose:    "shadow-[0_0_40px_-8px_rgba(251,113,133,0.4)]",
-};
-
-const ACCENT_BTN: Record<GymEntry["accent"], string> = {
-  cyan:    "border-cyan-400/55    bg-cyan-500/[0.1]    text-cyan-200    hover:border-cyan-300",
-  fuchsia: "border-fuchsia-400/55 bg-fuchsia-500/[0.1] text-fuchsia-200 hover:border-fuchsia-300",
-  amber:   "border-amber-400/55   bg-amber-500/[0.1]   text-amber-200   hover:border-amber-300",
-  emerald: "border-emerald-400/55 bg-emerald-500/[0.1] text-emerald-200 hover:border-emerald-300",
-  violet:  "border-violet-400/55  bg-violet-500/[0.1]  text-violet-200  hover:border-violet-300",
-  rose:    "border-rose-400/55    bg-rose-500/[0.1]    text-rose-200    hover:border-rose-300",
-};
-
-// Category badge styles (text only, shown as a pill above the gym name)
-const CATEGORY_PILL: Record<GymEntry["category"], string> = {
-  kuznya:       "border-cyan-400/40    bg-cyan-500/[0.08]    text-cyan-300",
-  fight_club:   "border-cyan-400/40    bg-cyan-500/[0.08]    text-cyan-300",
-  wrestling:    "border-fuchsia-400/40 bg-fuchsia-500/[0.08] text-fuchsia-300",
-  partner_slot: "border-violet-400/40  bg-violet-500/[0.08]  text-violet-300",
-};
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return name.slice(0, 2).toUpperCase();
-}
-
-export function GymPopup({ gym, anchor, onClose }: GymPopupProps) {
-  const hexColor     = GYM_ACCENT_HEX[gym.accent];
-  const networkLabel = NETWORK_LABELS[gym.network];
-  const categoryLabel = CATEGORY_LABELS[gym.category];
-  const hasCoach     = gym.coachName && gym.coachName !== "Уточняется";
-
-  const cardWidth = 296;
-  const LEFT = Math.max(8, anchor.x - cardWidth / 2);
+function SplitCard({
+  split,
+  hexColor,
+  busy,
+  displayCoachName,
+  onBook,
+}: {
+  split: GymSplit;
+  hexColor: string;
+  busy: boolean;
+  displayCoachName: string;
+  onBook: (splitId: string) => void;
+}) {
+  const isFull = split.bookedCount >= split.maxSeats;
+  const price = split.pricePerSeat || SPLIT_CLIENT_GROSS_RUB;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10, scale: 0.96 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: 6, scale: 0.97 }}
-      transition={{ type: "spring", stiffness: 340, damping: 26 }}
-      style={{ left: LEFT, top: Math.max(8, anchor.y - 20), width: cardWidth }}
-      className={[
-        "pointer-events-auto absolute z-[1100] overflow-hidden rounded-2xl border bg-zinc-950/97",
-        ACCENT_BORDER[gym.accent],
-        ACCENT_SHADOW[gym.accent],
-      ].join(" ")}
+    <div
+      className="rounded-xl border border-white/[0.08] bg-black/50 px-3.5 py-3"
+      style={{ boxShadow: `0 0 24px -14px ${hexColor}` }}
     >
-      <div
-        className="px-4 py-4"
-        style={{ background: `linear-gradient(135deg, ${hexColor}0e 0%, rgba(0,0,0,0.9) 55%)` }}
-      >
-        {/* Close */}
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Закрыть"
-          className="absolute right-3 top-3 rounded-full border border-white/[0.1] bg-black/50 px-2 py-0.5 font-[family-name:var(--font-geist-mono)] text-[9.5px] uppercase tracking-[0.2em] text-zinc-500 transition-colors hover:border-white/25 hover:text-zinc-200"
-        >
-          esc
-        </button>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-[family-name:var(--font-geist-sans)] text-[13px] font-semibold tracking-tight text-white">
+            {displayCoachName}
+          </p>
+          <p className="mt-0.5 font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.14em] text-neutral-500">
+            {split.timeLabel}
+          </p>
+        </div>
+        <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 font-[family-name:var(--font-jetbrains-mono)] text-[9px] font-semibold uppercase tracking-[0.12em] text-neutral-400">
+          {split.bookedCount} из {split.maxSeats}
+        </span>
+      </div>
 
-        {/* Header: category pill + city */}
-        <div className="flex items-center gap-2">
-          <span
-            className={[
-              "rounded-full border px-2 py-[1.5px] font-[family-name:var(--font-geist-mono)] text-[8.5px] font-semibold uppercase tracking-[0.28em]",
-              CATEGORY_PILL[gym.category],
-            ].join(" ")}
-          >
-            {categoryLabel}
-          </span>
-          <span className="font-[family-name:var(--font-geist-mono)] text-[9px] uppercase tracking-[0.22em] text-zinc-500">
-            {gym.city}
-          </span>
+      <div className="mt-3 flex items-end justify-between gap-3">
+        <div>
+          <p className="font-[family-name:var(--font-jetbrains-mono)] text-[22px] font-bold tabular-nums text-white">
+            {fmtRub.format(price)}
+          </p>
+          <p className="mt-0.5 font-[family-name:var(--font-geist-sans)] text-[9px] text-neutral-500">
+            Включена спортивная страховка
+          </p>
         </div>
 
-        {/* Gym name */}
-        <h3 className="mt-1.5 font-[family-name:var(--font-geist-mono)] text-base font-semibold uppercase leading-tight tracking-[0.12em] text-white">
-          {gym.name}
-        </h3>
-
-        {/* Address */}
-        <p className="mt-0.5 font-[family-name:var(--font-geist-mono)] text-[9.5px] uppercase tracking-[0.1em] text-zinc-500">
-          {gym.address}
-        </p>
-
-        {/* ── Specializations ──────────────────────────────────────────── */}
-        {gym.specializations.length > 0 && (
-          <div className="mt-3 rounded-xl border border-white/[0.06] bg-black/45 px-3 py-2.5">
-            <p className="font-[family-name:var(--font-geist-mono)] text-[9px] font-semibold uppercase tracking-[0.28em] text-zinc-500">
-              Специализация
-            </p>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {gym.specializations.map((s) => (
-                <span
-                  key={s}
-                  className="rounded-full border font-[family-name:var(--font-geist-mono)] text-[9px] uppercase tracking-[0.14em]"
-                  style={{
-                    borderColor: `${hexColor}40`,
-                    background: `${hexColor}0e`,
-                    color: hexColor,
-                    padding: "1.5px 7px",
-                  }}
-                >
-                  {s}
-                </span>
-              ))}
-            </div>
-          </div>
+        {split.isBookedByMe ? (
+          <span className="rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1.5 font-[family-name:var(--font-jetbrains-mono)] text-[8px] font-bold uppercase tracking-[0.16em] text-emerald-300">
+            ✓ Записан
+          </span>
+        ) : isFull ? (
+          <span className="font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.14em] text-neutral-600">
+            Мест нет
+          </span>
+        ) : (
+          <motion.button
+            type="button"
+            disabled={busy}
+            whileTap={{ scale: 0.96 }}
+            onClick={() => onBook(split.id)}
+            className="rounded-full border px-4 py-2 font-[family-name:var(--font-jetbrains-mono)] text-[9px] font-bold uppercase tracking-[0.2em] transition-opacity disabled:opacity-50"
+            style={{
+              borderColor: `${hexColor}88`,
+              background: `${hexColor}18`,
+              color: hexColor,
+              boxShadow: `0 0 20px -6px ${hexColor}`,
+            }}
+          >
+            {busy ? "…" : "Записаться"}
+          </motion.button>
         )}
+      </div>
+    </div>
+  );
+}
 
-        <hr className="my-3 border-white/[0.07]" />
+export function GymPopup({ gym, onClose, clientId, onBooked }: GymPopupProps) {
+  const hexColor = GYM_ACCENT_HEX[gym.accent];
+  const categoryLabel = CATEGORY_LABELS[gym.category];
 
-        {/* Coach */}
-        {hasCoach ? (
-          <div className="flex items-center gap-2.5">
-            <div
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border font-[family-name:var(--font-geist-mono)] text-[11px] font-bold uppercase text-white"
+  const client = useMemo(() => createWarriorBrowserClient(), []);
+  const [splits, setSplits] = useState<GymSplit[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [echo, setEcho] = useState<{ tone: "ok" | "err"; msg: string } | null>(
+    null,
+  );
+
+  const displayCoach =
+    gym.featuredAthletes?.[0]?.displayName ?? gym.coachName ?? "Тренер";
+
+  const loadSplits = useCallback(async () => {
+    if (!client) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const data = await fetchGymSplits(client, {
+        gymId: gym.id,
+        coachId: gym.coachId || undefined,
+        currentFighterId: clientId,
+      });
+      setSplits(data);
+    } catch {
+      setSplits([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [client, gym.id, gym.coachId, clientId]);
+
+  useEffect(() => {
+    void loadSplits();
+  }, [loadSplits]);
+
+  const handleBook = async (splitId: string) => {
+    if (!client) {
+      setEcho({ tone: "err", msg: "Supabase не настроен" });
+      return;
+    }
+    if (!clientId) {
+      setEcho({ tone: "err", msg: "Войди в аккаунт для записи" });
+      return;
+    }
+
+    setBusyId(splitId);
+    setEcho(null);
+
+    const result = await handleBookSplit(client, { clientId, splitId });
+
+    setBusyId(null);
+
+    if (!result.ok) {
+      setEcho({ tone: "err", msg: result.message });
+      return;
+    }
+
+    const msg = result.activated
+      ? "Записан · сплит АКТИВЕН · +1 streak · +1 билет"
+      : "Записан на сплит · +1 streak · +1 билет";
+
+    setEcho({ tone: "ok", msg });
+    onBooked?.(msg);
+    void loadSplits();
+    setTimeout(() => setEcho(null), 4000);
+  };
+
+  return (
+    <>
+      {/* Backdrop */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="absolute inset-0 z-[1050] bg-black/55 backdrop-blur-[2px]"
+        onClick={onClose}
+      />
+
+      {/* Bottom sheet */}
+      <motion.div
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "100%" }}
+        transition={{ type: "spring", stiffness: 320, damping: 32 }}
+        className="absolute inset-x-0 bottom-0 z-[1100] max-h-[72%] overflow-hidden rounded-t-3xl border border-white/[0.1] bg-zinc-950/98 shadow-[0_-24px_80px_rgba(0,0,0,0.85)]"
+        style={{
+          boxShadow: `0 -8px 60px -12px ${hexColor}55, 0 -24px 80px rgba(0,0,0,0.85)`,
+        }}
+      >
+        {/* Drag handle */}
+        <div className="flex justify-center pt-2.5">
+          <div className="h-1 w-10 rounded-full bg-white/15" />
+        </div>
+
+        <div
+          className="overflow-y-auto px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          style={{
+            background: `linear-gradient(180deg, ${hexColor}12 0%, rgba(9,9,11,0.98) 28%)`,
+          }}
+        >
+          {/* IRON WILL header block */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-[family-name:var(--font-jetbrains-mono)] text-[9px] font-bold uppercase tracking-[0.38em] text-neutral-500">
+                IRON WILL · {categoryLabel}
+              </p>
+              <h2 className="mt-1 font-[family-name:var(--font-geist-sans)] text-xl font-bold tracking-tight text-white">
+                {gym.name}
+              </h2>
+              <p className="mt-0.5 font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.16em] text-neutral-600">
+                {gym.city} · {gym.address}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Закрыть"
+              className="shrink-0 rounded-full border border-white/10 bg-black/50 px-2.5 py-1 font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.18em] text-neutral-500 hover:text-white"
+            >
+              esc
+            </button>
+          </div>
+
+          <hr className="my-4 border-white/[0.07]" />
+
+          {/* Nearest splits */}
+          <p className="font-[family-name:var(--font-jetbrains-mono)] text-[9px] font-semibold uppercase tracking-[0.32em] text-neutral-400">
+            Ближайшие сплиты
+          </p>
+
+          <div className="mt-3 space-y-2.5">
+            {loading ? (
+              <p className="py-6 text-center font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.22em] text-neutral-600">
+                Загрузка расписания…
+              </p>
+            ) : splits.length === 0 ? (
+              <p className="rounded-xl border border-white/[0.06] bg-black/40 px-3 py-4 text-center font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.16em] text-neutral-600">
+                Нет открытых сплитов · проверь миграцию 0009
+              </p>
+            ) : (
+              splits.map((split) => (
+                <SplitCard
+                  key={split.id}
+                  split={split}
+                  hexColor={hexColor}
+                  busy={busyId === split.id}
+                  displayCoachName={displayCoach !== "Уточняется" ? displayCoach : split.coachName}
+                  onBook={(id) => void handleBook(id)}
+                />
+              ))
+            )}
+          </div>
+
+          {/* Primary CTA — books first available split */}
+          {splits.some((s) => !s.isBookedByMe && s.bookedCount < s.maxSeats) ? (
+            <motion.button
+              type="button"
+              disabled={!!busyId || !clientId}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => {
+                const target = splits.find(
+                  (s) => !s.isBookedByMe && s.bookedCount < s.maxSeats,
+                );
+                if (target) void handleBook(target.id);
+              }}
+              className="mt-5 w-full rounded-2xl border py-3.5 font-[family-name:var(--font-jetbrains-mono)] text-[11px] font-extrabold uppercase tracking-[0.28em] text-white transition-opacity disabled:opacity-45"
               style={{
-                borderColor: `${hexColor}55`,
-                background: `${hexColor}18`,
-                boxShadow: `0 0 18px -6px ${hexColor}`,
+                borderColor: `${hexColor}aa`,
+                background: `linear-gradient(180deg, ${hexColor}33 0%, ${hexColor}12 100%)`,
+                boxShadow: `0 0 32px -6px ${hexColor}, inset 0 0 20px -10px ${hexColor}`,
               }}
             >
-              {initials(gym.coachName)}
-            </div>
-            <div className="min-w-0">
-              <p className="font-[family-name:var(--font-geist-mono)] text-[11.5px] uppercase tracking-[0.1em] text-zinc-100">
-                {gym.coachName}
-              </p>
-              <p className={["font-[family-name:var(--font-geist-mono)] text-[9.5px] uppercase tracking-[0.18em]", ACCENT_TEXT[gym.accent]].join(" ")}>
-                Главный тренер
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 shrink-0 rounded-full border border-white/[0.08] bg-white/[0.04]" />
-            <p className="font-[family-name:var(--font-geist-mono)] text-[10px] uppercase tracking-[0.18em] text-zinc-600">
-              Тренер · уточняется
-            </p>
-          </div>
-        )}
+              {busyId ? "Обработка…" : "Записаться на сплит"}
+            </motion.button>
+          ) : null}
 
-        {/* Contacts */}
-        {(gym.phone || gym.instagram) && (
-          <div className="mt-2.5 flex flex-wrap gap-2">
-            {gym.phone && (
-              <a
-                href={`tel:${gym.phone}`}
-                className="font-[family-name:var(--font-geist-mono)] text-[9.5px] uppercase tracking-[0.15em] text-zinc-500 transition-colors hover:text-zinc-200"
+          {!clientId ? (
+            <p className="mt-3 text-center font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.16em] text-amber-400/80">
+              Войди через Passport для оплаты сплита
+            </p>
+          ) : null}
+
+          <AnimatePresence>
+            {echo ? (
+              <motion.p
+                key={echo.msg}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className={[
+                  "mt-3 rounded-xl px-3 py-2 text-center font-[family-name:var(--font-jetbrains-mono)] text-[9px] font-semibold uppercase tracking-[0.16em]",
+                  echo.tone === "ok"
+                    ? "border border-emerald-400/35 bg-emerald-500/10 text-emerald-200"
+                    : "border border-rose-400/35 bg-rose-500/10 text-rose-200",
+                ].join(" ")}
               >
-                {gym.phone}
-              </a>
-            )}
-            {gym.instagram && (
-              <span className="font-[family-name:var(--font-geist-mono)] text-[9.5px] uppercase tracking-[0.15em] text-zinc-600">
-                {gym.instagram}
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Network label */}
-        {gym.network !== "independent" && (
-          <p className="mt-2 font-[family-name:var(--font-geist-mono)] text-[8.5px] uppercase tracking-[0.22em] text-zinc-700">
-            Сеть: {networkLabel}
-          </p>
-        )}
-
-        <hr className="my-3 border-white/[0.07]" />
-
-        {/* Featured athletes */}
-        {gym.featuredAthletes && gym.featuredAthletes.length > 0 && (
-          <div className="mb-3 rounded-xl border border-white/[0.06] bg-black/40 px-3 py-2.5">
-            <p className="font-[family-name:var(--font-geist-mono)] text-[9px] font-semibold uppercase tracking-[0.28em] text-zinc-500">
-              Бойцы клуба
-            </p>
-            <ul className="mt-2 space-y-2">
-              {gym.featuredAthletes.map((athlete: FeaturedAthlete) => (
-                <li key={athlete.profileId} className="flex items-center gap-2.5">
-                  {/* Mini hex avatar */}
-                  <div
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border font-[family-name:var(--font-geist-mono)] text-[9px] font-bold uppercase text-white"
-                    style={{
-                      borderColor: `${hexColor}50`,
-                      background: `${hexColor}14`,
-                      boxShadow: `0 0 10px -4px ${hexColor}`,
-                    }}
-                  >
-                    {initials(athlete.displayName)}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate font-[family-name:var(--font-geist-mono)] text-[10.5px] uppercase tracking-[0.1em] text-zinc-100">
-                      {athlete.displayName}
-                    </p>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span
-                        className="rounded-full border px-1.5 py-[1px] font-[family-name:var(--font-geist-mono)] text-[7.5px] font-semibold uppercase tracking-[0.22em]"
-                        style={{
-                          borderColor: `${hexColor}45`,
-                          background: `${hexColor}10`,
-                          color: hexColor,
-                        }}
-                      >
-                        {athlete.status}
-                      </span>
-                      <span className="font-[family-name:var(--font-geist-mono)] text-[8.5px] uppercase tracking-[0.1em] text-zinc-600">
-                        {athlete.label}
-                      </span>
-                    </div>
-                    {athlete.promotions && (
-                      <p className="mt-0.5 font-[family-name:var(--font-geist-mono)] text-[8px] uppercase tracking-[0.14em] text-zinc-700">
-                        {athlete.promotions}
-                      </p>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* Active splits */}
-        <div className="mb-3 rounded-xl border border-white/[0.05] bg-black/40 px-3 py-2">
-          <p className="font-[family-name:var(--font-geist-mono)] text-[9px] font-semibold uppercase tracking-[0.22em] text-zinc-500">
-            Активные сплиты
-          </p>
-          {gym.coachId ? (
-            <p className="mt-1 font-[family-name:var(--font-geist-mono)] text-[9px] uppercase tracking-[0.12em] text-zinc-700">
-              training_splits WHERE coach_id = {gym.coachId}
-            </p>
-          ) : (
-            <p className="mt-1 font-[family-name:var(--font-geist-mono)] text-[9px] uppercase tracking-[0.12em] text-zinc-700">
-              Тренер не подключён к Warrior Point
-            </p>
-          )}
+                {echo.msg}
+              </motion.p>
+            ) : null}
+          </AnimatePresence>
         </div>
-
-        {/* CTA */}
-        <button
-          type="button"
-          className={[
-            "w-full rounded-full border py-2 font-[family-name:var(--font-geist-mono)] text-[10.5px] font-semibold uppercase tracking-[0.28em] transition-all",
-            ACCENT_BTN[gym.accent],
-          ].join(" ")}
-          style={{ boxShadow: `0 0 24px -10px ${hexColor}` }}
-          onClick={() => { window.location.href = "/?tab=splits"; }}
-        >
-          Записаться
-        </button>
-      </div>
-    </motion.div>
+      </motion.div>
+    </>
   );
 }

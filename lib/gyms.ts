@@ -82,7 +82,7 @@ const KUZNYA_GYMS: GymEntry[] = [
     featuredAthletes: [
       {
         profileId: "WP-INTL-X9-441K",
-        displayName: "Виктор Колесник",
+        displayName: "Боец Бойцов",
         label: "MMA · Featherweight / Lightweight",
         status: "Pro",
         promotions: "ACA · RCC · M-1 Global · Marathon 360",
@@ -134,7 +134,7 @@ const KUZNYA_GYMS: GymEntry[] = [
     featuredAthletes: [
       {
         profileId: "WP-INTL-X9-441K",
-        displayName: "Виктор Колесник",
+        displayName: "Боец Бойцов",
         label: "Featherweight 66 кг · Lightweight 70.3 кг",
         status: "Pro",
         promotions: "ACA · RCC · M-1 Global · Marathon 360",

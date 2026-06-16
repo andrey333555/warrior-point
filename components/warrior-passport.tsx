@@ -16,6 +16,7 @@ import {
 } from "@/lib/economy";
 import { createWarriorBrowserClient } from "@/lib/supabase/client";
 import { persistWarriorTrainingSession } from "@/lib/supabase/warrior-sync";
+import { useOfflineSync } from "@/hooks/use-offline-sync";
 import { fetchFighterHydration, fetchWarriorProfile } from "@/lib/supabase/read";
 import { isWarriorAdminMode, WARRIOR_WINNER_STATUS } from "@/lib/admin";
 import {
@@ -33,7 +34,12 @@ import {
   DEMO_FIGHTER_CLUB,
   DEMO_FIGHTER_PROMOTIONS,
   DEMO_FIGHTER_WEIGHT_CLASS,
+  DEMO_COMBAT_SCORE,
 } from "@/lib/warrior-constants";
+import {
+  deriveInitials,
+  deriveWarriorDisplayId,
+} from "@/lib/supabase/provision-user";
 import { OctagonWidget } from "@/components/octagon-widget";
 import { DailyStreak } from "@/components/daily-streak";
 import { CyberStatTile } from "@/components/cyber-stat-tile";
@@ -48,7 +54,24 @@ import {
   RECENT_FIGHTS_MOCK,
   mockRecordSummary,
 } from "@/lib/mocks/recent-fights";
+import { fightsForLeague } from "@/lib/mocks/league-fights";
+import { FightsList } from "@/components/fights-list";
+import {
+  AcaLogo,
+  RccLogo,
+  FngLogo,
+  UfcLogo,
+} from "@/components/org-logos";
+import { buildOrgPetals, findOrg, getDemoFighterOrgRecord } from "@/data/organisations";
+import { syncWithSherdog, type SherdogSyncStatus } from "@/lib/sherdog-sync";
 import { rankRewardFor } from "@/lib/rank-rewards";
+
+const LEAGUE_CARDS = [
+  { id: "aca", Logo: AcaLogo, color: "#facc15", label: "ACA" },
+  { id: "rcc", Logo: RccLogo, color: "#f87171", label: "RCC" },
+  { id: "fng", Logo: FngLogo, color: "#34d399", label: "FN" },
+  { id: "ufc", Logo: UfcLogo, color: "#ef4444", label: "UFC" },
+] as const;
 
 const SHOWCASE = {
   elo: 1642,
@@ -67,7 +90,7 @@ const TABS: ReadonlyArray<CyberTabDef<TabId>> = [
   { id: "splits", label: "Сплиты" },
 ];
 
-export function WarriorPassport() {
+export function WarriorPassport({ fighterId }: { fighterId: string }) {
   const totalXpRef = useRef(0);
 
   const [totalXp, setTotalXp] = useState(0);
@@ -87,6 +110,23 @@ export function WarriorPassport() {
   const [role, setRole] = useState<WarriorRole>("fighter");
   const [adminMode, setAdminMode] = useState(false);
   const [agentsOpen, setAgentsOpen] = useState(false);
+
+  // ── Dynamic profile identity ─────────────────────────────────────────────
+  // Demo profile data is the fallback for the showcase fighter ID; every other user
+  // gets their own name/initials/ID derived from the database profile.
+  const isDemo = fighterId === DEMO_FIGHTER_DB_ID;
+  const [profileDisplayName, setProfileDisplayName] = useState<string>(
+    isDemo ? DEMO_FIGHTER_DISPLAY_NAME : "Воин",
+  );
+  const [profileInitials, setProfileInitials] = useState<string>(
+    isDemo ? DEMO_FIGHTER_INITIALS : deriveInitials(fighterId),
+  );
+  const [profileDisplayId, setProfileDisplayId] = useState<string>(
+    isDemo ? DEMO_FIGHTER_DISPLAY_ID : deriveWarriorDisplayId(fighterId),
+  );
+
+  // Offline-first sync: auto-flushes queued sessions when network returns
+  const offlineSync = useOfflineSync(createWarriorBrowserClient());
 
   const [remoteBootstrapped, setRemoteBootstrapped] = useState(false);
 
@@ -108,6 +148,11 @@ export function WarriorPassport() {
 
   const [hexOpen, setHexOpen] = useState<"record" | "level" | null>(null);
 
+  const [activeLeague, setActiveLeague] = useState<string | null>(null);
+  const [sherdogStatus, setSherdogStatus] = useState<SherdogSyncStatus>("idle");
+  const [proRecordStr, setProRecordStr] = useState<string | null>(null);
+  const [liveElo, setLiveElo] = useState(SHOWCASE.elo);
+
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const bracket = xpBracketProgress(totalXp);
@@ -117,12 +162,24 @@ export function WarriorPassport() {
    * Live W/L: wins follow the audited session count (each RECORD SESSION is a win).
    * Losses come from the mock card until we wire bout outcomes into Supabase.
    */
-  const liveRecord = (() => {
+  const sessionRecord = (() => {
     const seed = mockRecordSummary();
     const losses = seed.losses;
     const wins = Math.max(seed.wins, sessionsRecorded);
 
     return { wins, losses };
+  })();
+
+  const octagonRecord = (() => {
+    if (proRecordStr) {
+      const parts = proRecordStr.split("-").map((n) => Number(n) || 0);
+      return { wins: parts[0], losses: parts[1], draws: parts[2] ?? 0 };
+    }
+    return {
+      wins: isDemo ? 26 : sessionRecord.wins,
+      losses: isDemo ? 4 : sessionRecord.losses,
+      draws: isDemo ? 1 : 0,
+    };
   })();
 
   const rankReward = rankRewardFor(level);
@@ -146,6 +203,23 @@ export function WarriorPassport() {
   }, []);
 
   useEffect(() => {
+    const client = createWarriorBrowserClient();
+    if (!client || !remoteBootstrapped) return;
+
+    void (async () => {
+      setSherdogStatus("syncing");
+      const result = await syncWithSherdog(client, fighterId);
+      if (result.status === "ok") {
+        setProRecordStr(result.proRecord);
+        setLiveElo(result.elo);
+        setSherdogStatus("ok");
+      } else {
+        setSherdogStatus("error");
+      }
+    })();
+  }, [fighterId, remoteBootstrapped]);
+
+  useEffect(() => {
     let aborted = false;
 
     (async () => {
@@ -160,8 +234,8 @@ export function WarriorPassport() {
       try {
         // Run ledger hydration and profile fetch in parallel
         const [ledger, profile] = await Promise.all([
-          fetchFighterHydration(client, DEMO_FIGHTER_DB_ID),
-          fetchWarriorProfile(client, DEMO_FIGHTER_DB_ID),
+          fetchFighterHydration(client, fighterId),
+          fetchWarriorProfile(client, fighterId),
         ]);
 
         if (aborted) return;
@@ -183,7 +257,14 @@ export function WarriorPassport() {
         setCurrentStatus(ledger.currentStatus);
         setMonthlyWinnerAt(ledger.monthlyWinnerAt);
 
-        if (profile) setRole(profile.role);
+        if (profile) {
+          setRole(profile.role);
+          // Only override identity for non-demo fighters
+          if (!isDemo && profile.displayName) {
+            setProfileDisplayName(profile.displayName);
+            setProfileInitials(deriveInitials(profile.displayName));
+          }
+        }
       } catch (error) {
         console.error("[Warrior Point] hydration failed:", error);
       } finally {
@@ -239,17 +320,25 @@ export function WarriorPassport() {
         return;
       }
 
-      const { error } = await persistWarriorTrainingSession(client, {
-        fighterId: DEMO_FIGHTER_DB_ID,
+      const result = await persistWarriorTrainingSession(client, {
+        fighterId,
         economics,
         advancement,
         monthlyXpAfter: monthlyXpRef.current,
       });
 
-      if (error) {
-        console.error("[Warrior Point] Supabase persist error:", error);
-        setLedgerEcho({ tone: "err", message: error.message });
+      if (result.status === "error") {
+        console.error("[Warrior Point] persist error:", result.error);
+        setLedgerEcho({ tone: "err", message: result.error.message });
+        return;
+      }
 
+      if (result.status === "saved_offline") {
+        console.info(`[Warrior Point] saved offline (${result.pendingCount} pending)`);
+        setLedgerEcho({
+          tone: "ok",
+          message: `Сохранено офлайн · ${result.pendingCount} в очереди`,
+        });
         return;
       }
 
@@ -262,12 +351,12 @@ export function WarriorPassport() {
 
   /**
    * Called by AgentsWindow whenever an admin flips a fighter's `is_winner`.
-   * If it touched the locally-rendered passport (Виктор), we sync the hero
+   * If it touched the locally-rendered passport (demo fighter), we sync the hero
    * UI immediately so the gold sotka & pill react without a full reload.
    */
   const handleAgentsWinnerChange = useCallback(
-    (fighterId: string, nextIsWinner: boolean) => {
-      if (fighterId !== DEMO_FIGHTER_DB_ID) return;
+    (changedFighterId: string, nextIsWinner: boolean) => {
+      if (changedFighterId !== fighterId) return;
 
       setCurrentStatus(nextIsWinner ? WARRIOR_WINNER_STATUS : null);
       setMonthlyWinnerAt(nextIsWinner ? new Date().toISOString() : null);
@@ -355,20 +444,27 @@ export function WarriorPassport() {
             <div className="mt-5 flex flex-col items-center gap-6">
               {/* ── Octagon fighter card — 8 faces, stat pods, video centre ── */}
               <OctagonWidget
-                initials={DEMO_FIGHTER_INITIALS || "ВК"}
-                wins={26}
-                losses={4}
-                draws={1}
-                weightClass="FW / LW"
+                initials={profileInitials || "ББ"}
+                wins={octagonRecord.wins}
+                losses={octagonRecord.losses}
+                draws={octagonRecord.draws}
+                weightClass={isDemo ? "FW / LW" : "—"}
                 level={level}
-                elo={SHOWCASE.elo}
-                club="Кузня"
+                elo={liveElo}
+                club={isDemo ? "Кузня" : "—"}
                 style="MMA"
-                proSince={2013}
-                promotions={DEMO_FIGHTER_PROMOTIONS.split(" · ")}
+                proSince={isDemo ? 2013 : undefined}
+                promotions={
+                  isDemo
+                    ? DEMO_FIGHTER_PROMOTIONS.split(" · ")
+                    : []
+                }
                 streak={4}
                 isWinner={isWinner}
-                videoSrc="https://vk.com/video-190459948_456239028"
+                combatScore={DEMO_COMBAT_SCORE}
+                showPlaylist
+                metatronRole={role === "coach" ? "coach" : "fighter"}
+                videoSrc={isDemo ? "https://vk.com/video-190459948_456239028" : undefined}
               />
 
               <div className="min-w-0 flex-1 text-center sm:text-left">
@@ -376,11 +472,20 @@ export function WarriorPassport() {
                   Combatant
                 </p>
                 <h1 className="mt-2 text-3xl font-semibold leading-tight tracking-tight text-white sm:text-[38px]">
-                  {DEMO_FIGHTER_DISPLAY_NAME}
+                  {profileDisplayName}
                 </h1>
                 <p className="mt-2 font-[family-name:var(--font-geist-mono)] text-xs tracking-[0.05em] text-zinc-500 sm:text-sm">
-                  ID · {DEMO_FIGHTER_DISPLAY_ID}
+                  ID · {profileDisplayId}
                 </p>
+                {sherdogStatus === "ok" ? (
+                  <p className="mt-1 font-[family-name:var(--font-geist-mono)] text-[9px] font-semibold uppercase tracking-[0.18em] text-emerald-400">
+                    SHERDOG SYNC: OK · {proRecordStr ?? octagonRecord.wins + "-" + octagonRecord.losses}
+                  </p>
+                ) : sherdogStatus === "syncing" ? (
+                  <p className="mt-1 font-[family-name:var(--font-geist-mono)] text-[9px] uppercase tracking-[0.18em] text-zinc-600">
+                    SHERDOG SYNC…
+                  </p>
+                ) : null}
 
                 <div className="mt-5 flex flex-wrap items-center justify-center gap-3 sm:justify-start">
                   <RankPill level={level} maxLevel={MAX_LEVEL} />
@@ -440,7 +545,7 @@ export function WarriorPassport() {
                     id="hex-popover-record"
                     accent="green"
                     eyebrow="Recent bouts · live ledger"
-                    title={`Record · ${liveRecord.wins} − ${liveRecord.losses}`}
+                    title={`Record · ${octagonRecord.wins} − ${octagonRecord.losses}`}
                     onClose={() => setHexOpen(null)}
                   >
                     <ul className="space-y-2.5">
@@ -553,14 +658,72 @@ export function WarriorPassport() {
                 disabled={!remoteBootstrapped}
                 fmt={fmt}
                 echo={ledgerEcho}
+                offlinePending={offlineSync.pendingCount}
+                isSyncing={offlineSync.isSyncing}
               />
             </div>
           </div>
         </section>
 
+        {/* ── League contracts + FightsList (Lotus) ─────────────────────── */}
+        <section className="rounded-2xl border border-white/[0.06] bg-black/60 px-4 py-4 backdrop-blur-md">
+          <p className="mb-3 text-center font-[family-name:var(--font-geist-mono)] text-[9px] font-semibold uppercase tracking-[0.32em] text-zinc-500">
+            Contracts · ACA · RCC · FN · UFC
+          </p>
+          <div className="grid grid-cols-4 gap-2">
+            {LEAGUE_CARDS.map(({ id, Logo, color, label }) => {
+              const org = findOrg(id);
+              const record = getDemoFighterOrgRecord(id);
+              const petals = org ? buildOrgPetals(org, record) : [];
+              const isActive = activeLeague === id;
+
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setActiveLeague(isActive ? null : id)}
+                  className="flex flex-col items-center gap-1.5 rounded-xl border border-white/[0.08] bg-zinc-900/50 py-3 transition-colors hover:border-white/20"
+                  style={
+                    isActive
+                      ? { borderColor: `${color}88`, boxShadow: `0 0 18px -6px ${color}` }
+                      : undefined
+                  }
+                >
+                  <Logo size={28} color={color} active={isActive} />
+                  <span className="font-[family-name:var(--font-geist-mono)] text-[9px] font-semibold uppercase tracking-[0.2em]" style={{ color }}>
+                    {label}
+                  </span>
+                  {petals.length > 0 ? (
+                    <span className="font-[family-name:var(--font-geist-mono)] text-[7px] uppercase tracking-[0.12em] text-zinc-600">
+                      {petals[0]?.value}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+
+          <AnimatePresence>
+            {activeLeague ? (
+              <motion.div
+                key={activeLeague}
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="mt-4 overflow-hidden"
+              >
+                <FightsList
+                  fights={fightsForLeague(activeLeague)}
+                  accent={LEAGUE_CARDS.find((c) => c.id === activeLeague)?.color}
+                />
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
+        </section>
+
         {/* ELO */}
         <EloBar
-          elo={SHOWCASE.elo}
+          elo={liveElo}
           delta30d={SHOWCASE.eloDelta30d}
           globalPct={SHOWCASE.globalPct}
         />
@@ -607,7 +770,7 @@ export function WarriorPassport() {
 
               {activeTab === "splits" ? (
                 <SplitsBoard
-                  currentFighterId={DEMO_FIGHTER_DB_ID}
+                  currentFighterId={fighterId}
                   role={role}
                   adminMode={adminMode}
                   client={createWarriorBrowserClient()}
@@ -789,8 +952,10 @@ function RecordSessionAction(props: {
     | { tone: "ok"; message: string }
     | { tone: "err"; message: string }
     | null;
+  offlinePending?: number;
+  isSyncing?: boolean;
 }) {
-  const { onRecord, busy, disabled, fmt, echo } = props;
+  const { onRecord, busy, disabled, fmt, echo, offlinePending = 0, isSyncing = false } = props;
 
   return (
     <div className="flex flex-col items-center gap-3.5">
@@ -810,12 +975,23 @@ function RecordSessionAction(props: {
       </p>
 
       <div className="flex w-full max-w-sm flex-col items-center gap-1.5">
-        <span className="font-[family-name:var(--font-geist-mono)] text-[9.5px] uppercase tracking-[0.32em] text-zinc-500">
-          Тариф · демо ·{" "}
-          <span className="text-zinc-300">
-            {fmt.format(DEMO_SESSION_GROSS_RUB)}
+        <div className="flex items-center gap-2">
+          <span className="font-[family-name:var(--font-geist-mono)] text-[9.5px] uppercase tracking-[0.32em] text-zinc-500">
+            Тариф · демо ·{" "}
+            <span className="text-zinc-300">
+              {fmt.format(DEMO_SESSION_GROSS_RUB)}
+            </span>
           </span>
-        </span>
+          {/* Offline pending badge */}
+          {offlinePending > 0 && (
+            <span
+              className="inline-flex items-center gap-1 rounded-full border border-amber-400/40 bg-amber-500/10 px-2 py-0.5 font-[family-name:var(--font-geist-mono)] text-[8px] font-semibold uppercase tracking-[0.2em] text-amber-300"
+              title={`${offlinePending} сессий ожидают синхронизации`}
+            >
+              {isSyncing ? "⟳" : "⏱"} {offlinePending}
+            </span>
+          )}
+        </div>
 
         <motion.button
           type="button"

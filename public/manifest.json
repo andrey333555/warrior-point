@@ -1,12 +1,13 @@
 {
   "name": "Warrior Point",
-  "short_name": "WarriorPt",
+  "short_name": "WarriorPoint",
   "description": "Global combat ledger · Fighter Passport · БК Кузня",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#000000",
-  "theme_color": "#000000",
+  "theme_color": "#00F0FF",
   "icons": [
     {
       "src": "/icon-192.png",
@@ -22,5 +23,6 @@
     }
   ],
   "categories": ["sports", "health", "fitness"],
-  "lang": "ru"
+  "lang": "ru",
+  "dir": "ltr"
 }

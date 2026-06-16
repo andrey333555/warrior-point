@@ -17,6 +17,10 @@ const LINKS = [
 export function CyberNav() {
   const pathname = usePathname();
 
+  // The home route runs the monolithic Tactical OS, which ships its own
+  // floating nav — suppress the global rail there to avoid a double nav.
+  if ((pathname ?? "") === "/") return null;
+
   return (
     <nav
       className="fixed bottom-4 left-1/2 z-[100] -translate-x-1/2 rounded-full border border-white/[0.08] bg-black/80 px-1.5 py-1.5 backdrop-blur-xl shadow-[0_0_40px_-12px_rgba(34,211,238,0.45)] supports-[backdrop-filter]:bg-black/65"

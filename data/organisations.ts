@@ -50,7 +50,7 @@ export type FighterOrgRecord = {
 
 // ── Organisations ─────────────────────────────────────────────────────────────
 
-export const ORGANISATIONS: readonly OrgEntry[] = [
+export const ORGANISATIONS: OrgEntry[] = [
   {
     id: "aca",
     name: "Absolute Championship Akhmat",
@@ -156,7 +156,7 @@ export const ORGANISATIONS: readonly OrgEntry[] = [
     id: "nashedelo",
     name: "Наше Дело",
     shortName: "НД",
-    accent: "#60a5fa",
+    accent: "#4ade80",
     country: "RU",
     logoKey: "NasheDeloLogo",
     petalSchema: [
@@ -166,12 +166,76 @@ export const ORGANISATIONS: readonly OrgEntry[] = [
       { label: "Формат",             key: "format",              defaultValue: "Народный ММА" },
     ],
   },
-] as const;
+  // ── Fight Nights Global ──────────────────────────────────────────────────
+  {
+    id: "fng",
+    name: "Fight Nights Global",
+    shortName: "FNG",
+    accent: "#34d399",
+    country: "RU",
+    website: "https://fnmma.ru",
+    logoKey: "FngLogo",
+    petalSchema: [
+      { label: "Рекорд в лиге",      key: "leagueRecord",        defaultValue: "—" },
+      { label: "Статус контракта",   key: "contractStatus",      defaultValue: "—" },
+      { label: "Последний бой",      key: "lastFight",           defaultValue: "—" },
+      { label: "Серия",              key: "division",            defaultValue: "Fight Nights" },
+    ],
+  },
+  // ── Open FC ──────────────────────────────────────────────────────────────
+  {
+    id: "openfc",
+    name: "Open FC",
+    shortName: "OFC",
+    accent: "#fb923c",
+    country: "RU",
+    website: "https://openfc.ru",
+    logoKey: "OpenFcLogo",
+    petalSchema: [
+      { label: "Рекорд в лиге",      key: "leagueRecord",        defaultValue: "—" },
+      { label: "Статус контракта",   key: "contractStatus",      defaultValue: "—" },
+      { label: "Последний бой",      key: "lastFight",           defaultValue: "—" },
+      { label: "Формат",             key: "format",              defaultValue: "Open Format" },
+    ],
+  },
+  // ── UFC ───────────────────────────────────────────────────────────────────
+  {
+    id: "ufc",
+    name: "Ultimate Fighting Championship",
+    shortName: "UFC",
+    accent: "#ef4444",
+    country: "US",
+    website: "https://ufc.com",
+    logoKey: "UfcLogo",
+    petalSchema: [
+      { label: "Рекорд в UFC",       key: "leagueRecord",        defaultValue: "—" },
+      { label: "Статус контракта",   key: "contractStatus",      defaultValue: "—" },
+      { label: "Последний бой",      key: "lastFight",           defaultValue: "—" },
+      { label: "Рейтинг",            key: "notes",               defaultValue: "—" },
+    ],
+  },
+  // ── ONE Championship ─────────────────────────────────────────────────────
+  {
+    id: "one",
+    name: "ONE Championship",
+    shortName: "ONE",
+    accent: "#dc2626",
+    country: "SG",
+    website: "https://onefc.com",
+    logoKey: "OneFcLogo",
+    petalSchema: [
+      { label: "Рекорд в ONE",       key: "leagueRecord",        defaultValue: "—" },
+      { label: "Статус контракта",   key: "contractStatus",      defaultValue: "—" },
+      { label: "Последний бой",      key: "lastFight",           defaultValue: "—" },
+      { label: "Дивизион",           key: "division",            defaultValue: "—" },
+    ],
+  },
+];
 
-// ── Viktor Kolesnik's org records ─────────────────────────────────────────────
+// ── Demo fighter org records ─────────────────────────────────────────────────
 // Seed data — mirrored in Supabase migration 0007
 
-export const VIKTOR_ORG_RECORDS: readonly FighterOrgRecord[] = [
+export const DEMO_FIGHTER_ORG_RECORDS: FighterOrgRecord[] = [
   {
     orgId: "aca",
     fighterId: "WP-INTL-X9-441K",
@@ -227,9 +291,17 @@ export function findOrg(id: string): OrgEntry | undefined {
   return ORGANISATIONS.find((o) => o.id === id);
 }
 
-/** Get Viktor's record for a given org. */
+/** @deprecated Use DEMO_FIGHTER_ORG_RECORDS */
+export const VIKTOR_ORG_RECORDS = DEMO_FIGHTER_ORG_RECORDS;
+
+/** Get the demo fighter's record for a given org. */
+export function getDemoFighterOrgRecord(orgId: string): FighterOrgRecord | undefined {
+  return DEMO_FIGHTER_ORG_RECORDS.find((r) => r.orgId === orgId);
+}
+
+/** @deprecated Use getDemoFighterOrgRecord */
 export function getViktorOrgRecord(orgId: string): FighterOrgRecord | undefined {
-  return VIKTOR_ORG_RECORDS.find((r) => r.orgId === orgId);
+  return getDemoFighterOrgRecord(orgId);
 }
 
 /** Format a fighter-org record into lotus petals. */

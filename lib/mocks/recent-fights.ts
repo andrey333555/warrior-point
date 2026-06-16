@@ -1,4 +1,4 @@
-/** Mock card of Victor Kolesnik's three most recent sanctioned bouts. */
+/** Mock card of the demo fighter's three most recent sanctioned bouts. */
 
 export type FightResult = "W" | "L" | "D";
 

@@ -1,13 +1,16 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   fetchMonthlyXpLeaderboard,
   type MonthlyXpLeader,
 } from "@/lib/supabase/read";
 import { setFighterWinner } from "@/lib/supabase/admin-actions";
+import { LotusIcon, type LotusPetal } from "@/components/lotus-icon";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 type AgentsWindowProps = {
   open: boolean;
@@ -16,7 +19,217 @@ type AgentsWindowProps = {
   onClose: () => void;
 };
 
+// ── Formatters ────────────────────────────────────────────────────────────────
+
 const fmtXp = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
+const fmtRub = new Intl.NumberFormat("ru-RU", {
+  style: "currency",
+  currency: "RUB",
+  maximumFractionDigits: 0,
+});
+
+// ── Gold Confetti Engine (canvas, zero dependencies) ─────────────────────────
+
+type Particle = {
+  x: number; y: number;
+  vx: number; vy: number;
+  size: number;
+  color: string;
+  rotation: number;
+  rotSpeed: number;
+  alpha: number;
+  decay: number;
+};
+
+const GOLD_PALETTE = [
+  "#facc15", "#fbbf24", "#f59e0b", "#fde68a",
+  "#fff7ae", "#f6d860", "#ffe270", "#ffffff",
+];
+
+function spawnParticles(canvas: HTMLCanvasElement, cx: number, cy: number): Particle[] {
+  const count = 120;
+  return Array.from({ length: count }, () => {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 3 + Math.random() * 7;
+    return {
+      x: cx, y: cy,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 4,
+      size: 4 + Math.random() * 7,
+      color: GOLD_PALETTE[Math.floor(Math.random() * GOLD_PALETTE.length)],
+      rotation: Math.random() * 360,
+      rotSpeed: (Math.random() - 0.5) * 12,
+      alpha: 1,
+      decay: 0.012 + Math.random() * 0.01,
+    };
+    void canvas; // canvas used for context only
+  });
+}
+
+function runConfetti(
+  canvas: HTMLCanvasElement,
+  cx: number,
+  cy: number,
+  onDone: () => void,
+): () => void {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) { onDone(); return () => {}; }
+
+  let particles = spawnParticles(canvas, cx, cy);
+  let raf: number;
+
+  function draw() {
+    ctx!.clearRect(0, 0, canvas.width, canvas.height);
+
+    particles.forEach((p) => {
+      ctx!.save();
+      ctx!.globalAlpha = Math.max(0, p.alpha);
+      ctx!.translate(p.x, p.y);
+      ctx!.rotate((p.rotation * Math.PI) / 180);
+      ctx!.fillStyle = p.color;
+      ctx!.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.55);
+      ctx!.restore();
+
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.28; // gravity
+      p.vx *= 0.98; // drag
+      p.rotation += p.rotSpeed;
+      p.alpha -= p.decay;
+    });
+
+    particles = particles.filter((p) => p.alpha > 0);
+
+    if (particles.length > 0) {
+      raf = requestAnimationFrame(draw);
+    } else {
+      ctx!.clearRect(0, 0, canvas.width, canvas.height);
+      onDone();
+    }
+  }
+
+  raf = requestAnimationFrame(draw);
+  return () => {
+    cancelAnimationFrame(raf);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  };
+}
+
+// ── Prize SVG icons ───────────────────────────────────────────────────────────
+
+function IPhoneIcon({ size = 26, color = "#facc15" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="5" y="2" width="14" height="20" rx="3" stroke={color} strokeWidth="1.6" />
+      <circle cx="12" cy="18.5" r="1.1" fill={color} />
+      <line x1="9" y1="5" x2="15" y2="5" stroke={color} strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function GlovesIcon({ size = 26, color = "#facc15" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M6 20v-9a3 3 0 0 1 3-3h1V5.5a1.5 1.5 0 0 1 3 0V8h.5a2 2 0 0 1 2 2v10" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M6 20h12" stroke={color} strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M9 8V7a1 1 0 0 1 1-1" stroke={color} strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function WrapIcon({ size = 26, color = "#facc15" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M4 12 Q8 7 12 12 Q16 17 20 12" stroke={color} strokeWidth="1.6" strokeLinecap="round" fill="none" />
+      <path d="M4 15 Q8 10 12 15 Q16 20 20 15" stroke={color} strokeWidth="1.4" strokeLinecap="round" fill="none" opacity="0.6" />
+      <path d="M4 9 Q8 4 12 9 Q16 14 20 9" stroke={color} strokeWidth="1.4" strokeLinecap="round" fill="none" opacity="0.6" />
+    </svg>
+  );
+}
+
+// ── Prize Fund Row ────────────────────────────────────────────────────────────
+
+const PRIZE_ITEMS: Array<{
+  key: string;
+  name: string;
+  icon: React.ReactNode;
+  petals: LotusPetal[];
+}> = [
+  {
+    key: "iphone",
+    name: "iPhone 16",
+    icon: <IPhoneIcon size={26} color="#facc15" />,
+    petals: [
+      { label: "Приз", value: "iPhone 16" },
+      { label: "Ценность", value: fmtRub.format(99990) },
+      { label: "Условие", value: "Топ-1 XP за квартал" },
+      { label: "Доставка", value: "Россия · 7 дней" },
+    ],
+  },
+  {
+    key: "gloves",
+    name: "Перчатки",
+    icon: <GlovesIcon size={26} color="#facc15" />,
+    petals: [
+      { label: "Приз", value: "Боевые перчатки" },
+      { label: "Бренд", value: "Rival / Cleto Reyes" },
+      { label: "Ценность", value: fmtRub.format(18000) },
+      { label: "Условие", value: "Топ-2 XP за квартал" },
+    ],
+  },
+  {
+    key: "wraps",
+    name: "Бинты",
+    icon: <WrapIcon size={26} color="#facc15" />,
+    petals: [
+      { label: "Приз", value: "Профи-бинты · 5м" },
+      { label: "Ценность", value: fmtRub.format(3500) },
+      { label: "Условие", value: "Топ-3 XP за квартал" },
+      { label: "Поставка", value: "КУЗНЯ · Москва" },
+    ],
+  },
+];
+
+function PrizeFundRow() {
+  return (
+    <div className="mt-5 rounded-2xl border border-amber-400/25 bg-amber-500/[0.04] px-5 py-4">
+      <p className="mb-3 font-[family-name:var(--font-geist-mono)] text-[9.5px] font-semibold uppercase tracking-[0.38em] text-amber-300/80">
+        Призовой Фонд · Квартал
+      </p>
+      <div className="flex items-center justify-center gap-10 pt-6 pb-8">
+        {PRIZE_ITEMS.map((item, idx) => (
+          <div key={item.key} className="flex flex-col items-center gap-2">
+            {/* Size/radius scale by rank: 1st is biggest */}
+            <LotusIcon
+              name={item.name}
+              accent="#facc15"
+              petals={item.petals}
+              size={idx === 0 ? 48 : idx === 1 ? 40 : 34}
+              radius={idx === 0 ? 72 : 62}
+              closeOnOutside
+            >
+              <div
+                className="flex items-center justify-center rounded-full border border-amber-400/50 bg-amber-500/10"
+                style={{
+                  width: idx === 0 ? 48 : idx === 1 ? 40 : 34,
+                  height: idx === 0 ? 48 : idx === 1 ? 40 : 34,
+                  boxShadow: "0 0 20px rgba(234,179,8,0.5)",
+                }}
+              >
+                {item.icon}
+              </div>
+            </LotusIcon>
+            <span className="font-[family-name:var(--font-geist-mono)] text-[9px] uppercase tracking-[0.22em] text-amber-200/70">
+              {idx === 0 ? "①" : idx === 1 ? "②" : "③"} {item.name}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Main Component ────────────────────────────────────────────────────────────
 
 export function AgentsWindow({
   open,
@@ -29,6 +242,10 @@ export function AgentsWindow({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [echo, setEcho] = useState<{ tone: "ok" | "err"; message: string } | null>(null);
 
+  // Canvas ref for gold confetti
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const cancelConfettiRef = useRef<(() => void) | null>(null);
+
   const refresh = useCallback(async () => {
     if (!client) {
       setRows([]);
@@ -36,9 +253,7 @@ export function AgentsWindow({
       setEcho({ tone: "err", message: "Supabase не настроен" });
       return;
     }
-
     setLoading(true);
-
     try {
       const data = await fetchMonthlyXpLeaderboard(client, { days: 30, limit: 10 });
       setRows(data);
@@ -64,14 +279,58 @@ export function AgentsWindow({
 
   useEffect(() => {
     if (!echo || echo.tone !== "ok") return undefined;
-    const id = window.setTimeout(() => setEcho(null), 3600);
+    const id = window.setTimeout(() => setEcho(null), 4200);
     return () => window.clearTimeout(id);
   }, [echo]);
 
+  // Cleanup confetti canvas on unmount / close
+  useEffect(() => {
+    if (!open) cancelConfettiRef.current?.();
+  }, [open]);
+
+  // ── Confetti burst ────────────────────────────────────────────────────────
+
+  const fireConfetti = useCallback((buttonEl: HTMLButtonElement | null) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    // Resize canvas to fill the dialog
+    const rect = canvas.parentElement?.getBoundingClientRect();
+    if (rect) {
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+    }
+
+    // Burst origin: centre of button or dialog centre
+    let cx = canvas.width / 2;
+    let cy = canvas.height / 2;
+
+    if (buttonEl) {
+      const br = buttonEl.getBoundingClientRect();
+      const cr = canvas.getBoundingClientRect();
+      cx = br.left - cr.left + br.width / 2;
+      cy = br.top - cr.top + br.height / 2;
+    }
+
+    cancelConfettiRef.current?.();
+    cancelConfettiRef.current = runConfetti(canvas, cx, cy, () => {
+      cancelConfettiRef.current = null;
+    });
+  }, []);
+
+  // ── Set winner ────────────────────────────────────────────────────────────
+
   const handleSetWinner = useCallback(
-    async (fighterId: string, nextIsWinner: boolean) => {
+    async (
+      fighterId: string,
+      nextIsWinner: boolean,
+      buttonEl: HTMLButtonElement | null,
+    ) => {
       if (!client) return;
       setBusyId(fighterId);
+
+      // Fire confetti before hitting Supabase for a snappy feel
+      if (nextIsWinner) fireConfetti(buttonEl);
 
       try {
         const { error } = await setFighterWinner(client, fighterId, nextIsWinner);
@@ -84,7 +343,7 @@ export function AgentsWindow({
         setEcho({
           tone: "ok",
           message: nextIsWinner
-            ? `★ ${fighterId} — Winner of the Month · is_winner=true синхронизирован`
+            ? `★ ${fighterId} — Winner of the Quarter · is_winner=true синхронизирован`
             : `${fighterId} — статус снят`,
         });
 
@@ -107,7 +366,7 @@ export function AgentsWindow({
         setBusyId(null);
       }
     },
-    [client, onWinnerChange, refresh],
+    [client, fireConfetti, onWinnerChange, refresh],
   );
 
   return (
@@ -133,6 +392,13 @@ export function AgentsWindow({
             onClick={(e) => e.stopPropagation()}
             className="relative w-full max-w-2xl overflow-hidden rounded-3xl border border-amber-400/40 bg-zinc-950/95 p-[1px] shadow-[0_0_70px_-10px_rgba(250,204,21,0.45)]"
           >
+            {/* Gold confetti canvas — absolute, pointer-events:none */}
+            <canvas
+              ref={canvasRef}
+              aria-hidden
+              className="pointer-events-none absolute inset-0 z-10 rounded-3xl"
+            />
+
             <div className="rounded-[calc(1.5rem-1px)] bg-gradient-to-br from-amber-500/[0.07] via-black/85 to-black/95 px-5 py-6 sm:px-7 sm:py-8">
 
               {/* Header */}
@@ -148,7 +414,7 @@ export function AgentsWindow({
                     Agents Window
                   </h2>
                   <p className="mt-1.5 font-[family-name:var(--font-geist-mono)] text-[10.5px] uppercase tracking-[0.2em] text-zinc-500">
-                    30-day XP surge · кандидаты на победителя
+                    30-day XP surge · кандидаты на победителя квартала
                   </p>
                 </div>
                 <button
@@ -160,6 +426,9 @@ export function AgentsWindow({
                   esc
                 </button>
               </header>
+
+              {/* Prize Fund */}
+              <PrizeFundRow />
 
               {/* Echo */}
               <AnimatePresence>
@@ -180,7 +449,7 @@ export function AgentsWindow({
                 ) : null}
               </AnimatePresence>
 
-              {/* Table */}
+              {/* Leaderboard Table */}
               <div className="mt-5 overflow-hidden rounded-2xl border border-white/[0.07] bg-black/55">
                 <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_4.5rem_4.5rem_minmax(8rem,auto)] gap-2 border-b border-amber-400/15 bg-black/65 px-3 py-2.5 font-[family-name:var(--font-geist-mono)] text-[9.5px] font-semibold uppercase tracking-[0.22em] text-amber-300/95 sm:grid-cols-[3rem_minmax(0,1fr)_5.5rem_5.5rem_minmax(11rem,auto)] sm:gap-3 sm:px-4 sm:text-[10.5px]">
                   <span>#</span>
@@ -190,7 +459,7 @@ export function AgentsWindow({
                   <span className="text-right">Действие</span>
                 </div>
 
-                <ul className="max-h-[55vh] divide-y divide-white/[0.05] overflow-y-auto">
+                <ul className="max-h-[40vh] divide-y divide-white/[0.05] overflow-y-auto">
                   {loading ? (
                     <li className="px-4 py-8 text-center font-[family-name:var(--font-geist-mono)] text-[11px] uppercase tracking-[0.22em] text-zinc-500">
                       Загружаю месячный леджер…
@@ -255,7 +524,13 @@ export function AgentsWindow({
                             <motion.button
                               type="button"
                               disabled={busy || !client}
-                              onClick={() => void handleSetWinner(row.fighterSlug, !isWinner)}
+                              onClick={(e) =>
+                                void handleSetWinner(
+                                  row.fighterSlug,
+                                  !isWinner,
+                                  e.currentTarget,
+                                )
+                              }
                               whileTap={{ scale: busy ? 1 : 0.96 }}
                               animate={
                                 isWinner
@@ -294,11 +569,11 @@ export function AgentsWindow({
                 Источник:{" "}
                 <span className="text-zinc-300">RPC get_monthly_xp_leaders(30, 10)</span>
                 {" "}→ server-side{" "}
-                <span className="text-amber-200">SUM(xp_awarded)</span>.
+                <span className="text-amber-200">SUM(xp_awarded)</span>.{" "}
                 «НАЗНАЧИТЬ» пишет{" "}
                 <span className="text-amber-200">is_winner=true</span> в{" "}
                 <span className="text-zinc-300">fighter_stats</span>{" "}
-                и активирует золотую соту в паспорте.
+                · золотые конфетти подтверждают успех.
               </p>
             </div>
           </motion.div>
