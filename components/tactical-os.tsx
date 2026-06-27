@@ -264,6 +264,7 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
                 stats={stats}
                 econ={econ}
                 fighterId={fighterId}
+                totalXp={totalXp}
                 onCreateSplit={onCreateSplit}
                 onPlayVideo={setActiveVideo}
                 onApplyTraining={onApplyTraining}

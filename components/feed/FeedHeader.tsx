@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 function HexLogo() {
   return (
     <svg width="24" height="24" viewBox="0 0 28 28" fill="none" aria-hidden>
@@ -53,6 +55,8 @@ export function FeedHeader({
   onProfileClick,
   onNotificationsClick,
 }: FeedHeaderProps) {
+  const router = useRouter();
+
   return (
     <header className="sticky top-0 z-50 flex shrink-0 items-center justify-between border-b border-white/10 bg-black/40 px-4 py-3 backdrop-blur-xl">
       <div className="flex min-w-0 items-center gap-2">
@@ -63,6 +67,19 @@ export function FeedHeader({
       </div>
 
       <div className="flex shrink-0 items-center gap-3">
+        <button
+          type="button"
+          onClick={() => router.push("/vip")}
+          className="rounded-full px-2.5 py-1 font-[family-name:var(--font-jetbrains-mono)] text-[10px] font-semibold uppercase tracking-[0.14em] transition-opacity hover:opacity-90"
+          style={{
+            background: "rgba(201,168,76,0.15)",
+            color: "#C9A84C",
+            border: "0.5px solid rgba(201,168,76,0.4)",
+            boxShadow: "0 0 12px -4px rgba(201,168,76,0.4)",
+          }}
+        >
+          ⚡ Стать VIP
+        </button>
         <button
           type="button"
           onClick={onNotificationsClick}

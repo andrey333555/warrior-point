@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -50,6 +52,7 @@ import { HexBadge } from "@/components/hex-badge";
 import { HexCluster, type SotkaSlot } from "@/components/hex-cluster";
 import { HexPopover } from "@/components/hex-popover";
 import { XpBar } from "@/components/xp-bar";
+import { RoundProgress, RoundBadge } from "@/components/RoundProgress";
 import {
   RECENT_FIGHTS_MOCK,
   mockRecordSummary,
@@ -101,6 +104,7 @@ const TABS: ReadonlyArray<CyberTabDef<TabId>> = [
 ];
 
 export function WarriorPassport({ fighterId }: { fighterId: string }) {
+  const router = useRouter();
   const [isDonateModalOpen, setIsDonateModalOpen] = useState(false);
   const [trainingMenuOpen, setTrainingMenuOpen] = useState(false);
   const [donateBusy, setDonateBusy] = useState(false);
@@ -796,7 +800,22 @@ export function WarriorPassport({ fighterId }: { fighterId: string }) {
               ) : null}
             </AnimatePresence>
 
-            <div className="mt-7">
+            <div className="mt-7 space-y-5">
+              <RoundBadge xp={totalXp} />
+              <RoundProgress xp={totalXp} showSources />
+              <button
+                type="button"
+                onClick={() => router.push("/vip")}
+                className="flex w-full items-center justify-center rounded-xl py-3 font-[family-name:var(--font-jetbrains-mono)] text-[11px] font-semibold uppercase tracking-[0.18em] transition-opacity hover:opacity-90"
+                style={{
+                  background: "rgba(201,168,76,0.15)",
+                  color: "#C9A84C",
+                  border: "0.5px solid rgba(201,168,76,0.35)",
+                  boxShadow: "0 0 20px -8px rgba(201,168,76,0.35)",
+                }}
+              >
+                ⚡ Стать VIP
+              </button>
               <XpBar
                 level={bracket.level}
                 maxLevel={MAX_LEVEL}
@@ -1089,6 +1108,8 @@ function RolePill({ role }: { role: WarriorRole }) {
 }
 
 function RankPill({ level, maxLevel }: { level: number; maxLevel: number }) {
+  const tier = rankRewardFor(level);
+
   return (
     <AnimatePresence mode="wait" initial={false}>
       <motion.span
@@ -1097,10 +1118,14 @@ function RankPill({ level, maxLevel }: { level: number; maxLevel: number }) {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: -6, scale: 0.98 }}
         transition={{ type: "spring", stiffness: 380, damping: 28 }}
-        className="inline-flex items-center gap-2 rounded-full border border-cyan-400/45 bg-cyan-500/[0.08] px-3 py-1 font-[family-name:var(--font-geist-mono)] text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-200"
-        style={{ boxShadow: "0 0 22px -6px rgba(34,211,238,0.55)" }}
+        className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 font-[family-name:var(--font-geist-mono)] text-[11px] font-semibold uppercase tracking-[0.22em] ${tier.textClass}`}
+        style={{
+          borderColor: `${tier.color}73`,
+          background: `${tier.color}14`,
+          boxShadow: `0 0 22px -6px ${tier.color}88`,
+        }}
       >
-        Level {level}
+        {tier.name} · {level}
         <span className="text-zinc-500">/{maxLevel}</span>
       </motion.span>
     </AnimatePresence>
