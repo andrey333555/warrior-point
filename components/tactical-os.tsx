@@ -3,9 +3,8 @@
 /**
  * TacticalOS — monolithic No-Scroll shell for Warrior Point.
  *
- * Locks the whole experience into 100dvh / overflow-hidden and switches
- * instantly between the Passport (Screen 1) and Leaderboard (Screen 2) views
- * via the floating bottom nav. The Map remains a dedicated route.
+ * Vertical stack: Header (logo · search · avatar) → Category tabs → Main feed → Floating player.
+ * Categories: Лента (cards) · Паспорт · Топ. Map remains a dedicated route.
  *
  * All Supabase connection interfaces are preserved:
  *   - createWarriorBrowserClient()  (memoised browser client)
@@ -34,35 +33,19 @@ import {
   type PassportEcon,
 } from "@/components/tactical/passport-view";
 import { LeaderboardView } from "@/components/tactical/leaderboard-view";
+import { FeedLayout } from "@/components/feed/FeedLayout";
+import { FeedStream } from "@/components/feed/FeedStream";
+import type { FeedCategory } from "@/components/feed/types";
+import type { Video } from "@/lib/data";
+import { deriveInitials } from "@/lib/supabase/provision-user";
 
-type ViewId = "passport" | "leaderboard";
 type Role = "fighter" | "coach" | "athlete";
-
-const ROLES: Role[] = ["fighter", "coach", "athlete"];
 
 const ROLE_ACCENT: Record<Role, string> = {
   fighter: "#e879f9",
   coach: "#facc15",
   athlete: "#00F0FF",
 };
-
-// ── Network status hook ────────────────────────────────────────────────────
-
-function useNetworkStatus(): boolean {
-  const [online, setOnline] = useState(true);
-  useEffect(() => {
-    setOnline(typeof navigator === "undefined" ? true : navigator.onLine);
-    const on = () => setOnline(true);
-    const off = () => setOnline(false);
-    window.addEventListener("online", on);
-    window.addEventListener("offline", off);
-    return () => {
-      window.removeEventListener("online", on);
-      window.removeEventListener("offline", off);
-    };
-  }, []);
-  return online;
-}
 
 // ── Combat score model ──────────────────────────────────────────────────────
 
@@ -74,9 +57,10 @@ function combatScore(level: number, elo: number): number {
 // ── Shell ─────────────────────────────────────────────────────────────────
 
 export function TacticalOS({ fighterId }: { fighterId: string }) {
-  const [view, setView] = useState<ViewId>("passport");
+  const [category, setCategory] = useState<FeedCategory>("feed");
   const [role, setRole] = useState<Role>("fighter");
-  const online = useNetworkStatus();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeVideo, setActiveVideo] = useState<Video | null>(null);
 
   const isDemo = fighterId === DEMO_FIGHTER_DB_ID;
   const client = useMemo(() => createWarriorBrowserClient(), []);
@@ -127,6 +111,18 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
     window.setTimeout(() => setEcho(null), 2800);
   }, []);
 
+  const onApplyTraining = useCallback(() => {
+    setEcho("Заявка на персональные тренировки · скоро");
+    window.setTimeout(() => setEcho(null), 2800);
+  }, []);
+
+  useEffect(() => {
+    if (category !== "feed") {
+      setActiveVideo(null);
+      setSearchQuery("");
+    }
+  }, [category]);
+
   // ── Derive role-aware passport stats ─────────────────────────────────────
   const realLevel = deriveLevel(totalXp);
   const fighterLevel = isDemo ? (realLevel > 1 ? realLevel : 17) : realLevel;
@@ -149,12 +145,24 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
     combatScore: isDemo ? 92.4 : combatScore(realLevel, 1400 + Math.round(totalXp / 12)),
     level: role === "athlete" ? athleteLevel : fighterLevel,
     maxLevel: MAX_LEVEL,
-    proRecord: isDemo ? "26-4-1" : "0-0-0",
+    proRecord: isDemo ? "27-4-1" : "0-0-0",
+    recordMethods: isDemo ? { ko: 21, dec: 4, sub: 2 } : { ko: 0, dec: 0, sub: 0 },
     elo: isDemo ? 1642 : 1400 + Math.round(totalXp / 12),
     weightKg: isDemo ? 70.3 : 70.0,
+    heightCm: isDemo ? 178 : 175,
+    reachCm: isDemo ? 182 : 178,
+    age: isDemo ? 28 : 25,
     streakDays: isDemo ? 28 : 0,
     koRatioPct: isDemo ? 62 : 0,
     isWinner,
+    badges:
+      role === "fighter" && isDemo
+        ? ["🏆 ACA Champ", "🥇 МСМК", "🔥 5 win streak"]
+        : undefined,
+    aiAnalysis:
+      role === "fighter" && isDemo
+        ? "Cobra — агрессивный striker с высоким finishing rate..."
+        : undefined,
   };
 
   // ── Economy / membership data (training_sessions · fighter_stats) ─────────
@@ -218,79 +226,47 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
       />
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-cyan-500/[0.04] via-transparent to-fuchsia-500/[0.06]" />
 
-      {/* ── HEADER ──────────────────────────────────────────────────────── */}
-      <header className="relative z-20 flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.07] bg-black/40 px-3 py-2 backdrop-blur-md sm:px-5">
-        {/* Logo */}
-        <div className="flex min-w-0 items-center gap-2">
-          <span
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-cyan-400/50 bg-cyan-500/10"
-            style={{ boxShadow: "0 0 12px -3px rgba(0,240,255,0.7)" }}
-          >
-            <span className="h-2 w-2 rotate-45 bg-cyan-400" style={{ boxShadow: "0 0 6px #00F0FF" }} />
-          </span>
-          <div className="min-w-0 leading-tight">
-            <p className="truncate font-[family-name:var(--font-geist-mono)] text-[10px] font-bold uppercase tracking-[0.22em] text-white">
-              Warrior Point
-            </p>
-            <p className="hidden truncate font-[family-name:var(--font-geist-mono)] text-[7.5px] uppercase tracking-[0.3em] text-cyan-400/60 sm:block">
-              // Tactical Fighter OS
-            </p>
-          </div>
-        </div>
-
-        {/* Ops data (center) */}
-        <div className="hidden items-center gap-2 font-[family-name:var(--font-geist-mono)] text-[8.5px] uppercase tracking-[0.24em] text-zinc-500 md:flex">
-          <span>KRASNODAR</span>
-          <span className="text-zinc-700">|</span>
-          <span className="flex items-center gap-1.5">
-            <span
-              className="h-1.5 w-1.5 rounded-full"
-              style={{
-                background: online ? "#34d399" : "#ef4444",
-                boxShadow: `0 0 6px ${online ? "#34d399" : "#ef4444"}`,
-              }}
-            />
-            {online ? "ONLINE" : "OFFLINE"}
-          </span>
-        </div>
-
-        {/* Role switcher */}
-        <div className="flex shrink-0 rounded-full border border-white/[0.08] bg-black/50 p-0.5">
-          {ROLES.map((r) => (
-            <button
-              key={r}
-              type="button"
-              onClick={() => setRole(r)}
-              className={
-                role === r
-                  ? "rounded-full border border-cyan-400/60 bg-cyan-500/10 px-2 py-1 font-[family-name:var(--font-geist-mono)] text-[7.5px] font-semibold uppercase tracking-[0.16em] text-cyan-200 shadow-[0_0_14px_-5px_rgba(0,240,255,0.9)] sm:px-2.5 sm:text-[8px]"
-                  : "rounded-full border border-transparent px-2 py-1 font-[family-name:var(--font-geist-mono)] text-[7.5px] font-semibold uppercase tracking-[0.16em] text-zinc-600 transition-colors hover:text-cyan-300 sm:px-2.5 sm:text-[8px]"
-              }
+      <FeedLayout
+        category={category}
+        onCategoryChange={setCategory}
+        roleAccent={ROLE_ACCENT[role]}
+        profileInitials={deriveInitials(stats.name)}
+        onSearch={setSearchQuery}
+        onProfileClick={() => setCategory("passport")}
+        activeVideo={activeVideo}
+        onCloseVideo={() => setActiveVideo(null)}
+        bottomNav={
+          <nav className="relative z-20 flex shrink-0 justify-center px-4 pb-[calc(0.6rem+env(safe-area-inset-bottom,0px))] pt-1.5">
+            <Link
+              href="/map"
+              className="rounded-full border border-white/[0.08] bg-black/70 px-5 py-2 font-[family-name:var(--font-geist-mono)] text-[10px] font-semibold uppercase tracking-[0.26em] text-zinc-500 backdrop-blur-xl transition-colors hover:border-cyan-400/40 hover:text-cyan-300"
+              style={{ boxShadow: "0 0 40px -12px rgba(0,240,255,0.5)" }}
             >
-              {r}
-            </button>
-          ))}
-        </div>
-      </header>
-
-      {/* ── VIEW AREA ───────────────────────────────────────────────────── */}
-      <main className="relative z-10 min-h-0 flex-1">
+              Map
+            </Link>
+          </nav>
+        }
+      >
         <AnimatePresence mode="wait">
           <motion.div
-            key={view}
-            initial={{ opacity: 0, y: 10 }}
+            key={category}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.22 }}
-            className="h-full"
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.2 }}
+            className="min-h-full"
           >
-            {view === "passport" ? (
+            {category === "feed" ? (
+              <FeedStream searchQuery={searchQuery} onPlay={setActiveVideo} />
+            ) : category === "passport" ? (
               <PassportView
                 role={role}
                 stats={stats}
                 econ={econ}
                 fighterId={fighterId}
                 onCreateSplit={onCreateSplit}
+                onPlayVideo={setActiveVideo}
+                onApplyTraining={onApplyTraining}
               />
             ) : (
               <LeaderboardView
@@ -302,7 +278,6 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
           </motion.div>
         </AnimatePresence>
 
-        {/* Transient action echo */}
         <AnimatePresence>
           {echo ? (
             <motion.div
@@ -310,58 +285,15 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 12 }}
-              className="pointer-events-none absolute bottom-3 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-full border border-amber-400/40 bg-black/85 px-4 py-1.5 font-[family-name:var(--font-jetbrains-mono)] text-[9px] font-semibold uppercase tracking-[0.2em] text-amber-200 backdrop-blur-md"
+              className="pointer-events-none sticky bottom-2 z-30 mx-auto mt-4 w-fit whitespace-nowrap rounded-full border border-amber-400/40 bg-black/85 px-4 py-1.5 font-[family-name:var(--font-jetbrains-mono)] text-[9px] font-semibold uppercase tracking-[0.2em] text-amber-200 backdrop-blur-md"
               style={{ boxShadow: "0 0 24px -8px rgba(250,204,21,0.7)" }}
             >
               {echo}
             </motion.div>
           ) : null}
         </AnimatePresence>
-      </main>
-
-      {/* ── FLOATING BOTTOM NAV ─────────────────────────────────────────── */}
-      <nav className="relative z-20 flex shrink-0 justify-center px-4 pb-[calc(0.6rem+env(safe-area-inset-bottom,0px))] pt-1.5">
-        <div className="flex items-center gap-1 rounded-full border border-white/[0.08] bg-black/70 p-1 backdrop-blur-xl shadow-[0_0_40px_-12px_rgba(0,240,255,0.5)]">
-          <NavTab active={view === "passport"} onClick={() => setView("passport")}>
-            Passport
-          </NavTab>
-          <NavTab active={view === "leaderboard"} onClick={() => setView("leaderboard")}>
-            Leaderboard
-          </NavTab>
-          <Link
-            href="/map"
-            className="rounded-full border border-transparent px-4 py-1.5 font-[family-name:var(--font-geist-mono)] text-[10px] font-semibold uppercase tracking-[0.26em] text-zinc-500 transition-colors hover:border-white/[0.08] hover:text-cyan-300"
-          >
-            Map
-          </Link>
-        </div>
-      </nav>
+      </FeedLayout>
       </div>
     </div>
-  );
-}
-
-function NavTab({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-current={active ? "page" : undefined}
-      className={
-        active
-          ? "rounded-full border border-cyan-400/55 bg-cyan-500/10 px-4 py-1.5 font-[family-name:var(--font-geist-mono)] text-[10px] font-semibold uppercase tracking-[0.26em] text-cyan-200 shadow-[0_0_22px_-6px_rgba(0,240,255,0.8)]"
-          : "rounded-full border border-transparent px-4 py-1.5 font-[family-name:var(--font-geist-mono)] text-[10px] font-semibold uppercase tracking-[0.26em] text-zinc-500 transition-colors hover:border-white/[0.08] hover:text-cyan-300"
-      }
-    >
-      {children}
-    </button>
   );
 }

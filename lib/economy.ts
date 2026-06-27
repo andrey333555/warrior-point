@@ -1,6 +1,15 @@
 /** Platform commission withheld from every sanctioned settlement (% of gross). */
 export const PLATFORM_COMMISSION_PCT = 19 as const;
 
+/** Donation tip commission (% of gross SBP transfer). */
+export const DONATION_PLATFORM_FEE_PCT = 5 as const;
+
+export function donateSettlement(gross: number) {
+  const safe = Math.max(0, Math.round(gross));
+  const platformFee = Math.round(safe * (DONATION_PLATFORM_FEE_PCT / 100));
+  return { gross: safe, platformFee, net: safe - platformFee };
+}
+
 // ── Open Marketplace Tariff ────────────────────────────────────────────────────
 
 /**

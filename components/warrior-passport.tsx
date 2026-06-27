@@ -65,6 +65,16 @@ import {
 import { buildOrgPetals, findOrg, getDemoFighterOrgRecord } from "@/data/organisations";
 import { syncWithSherdog, type SherdogSyncStatus } from "@/lib/sherdog-sync";
 import { rankRewardFor } from "@/lib/rank-rewards";
+import { useWarriorAuth } from "@/hooks/use-warrior-auth";
+import {
+  DonateModal,
+  type DonatePaymentHandler,
+} from "@/components/donate-modal";
+import {
+  fetchFundraiserProgress,
+  handleDonate,
+  type FundraiserProgress,
+} from "@/lib/supabase/donations";
 
 const LEAGUE_CARDS = [
   { id: "aca", Logo: AcaLogo, color: "#facc15", label: "ACA" },
@@ -91,6 +101,22 @@ const TABS: ReadonlyArray<CyberTabDef<TabId>> = [
 ];
 
 export function WarriorPassport({ fighterId }: { fighterId: string }) {
+  const [isDonateModalOpen, setIsDonateModalOpen] = useState(false);
+  const [trainingMenuOpen, setTrainingMenuOpen] = useState(false);
+  const [donateBusy, setDonateBusy] = useState(false);
+  const [donateError, setDonateError] = useState<string | null>(null);
+  const [donorBalance, setDonorBalance] = useState(15_000);
+  const [fundraiser, setFundraiser] = useState<FundraiserProgress>({
+    title: "На сборы в Дагестан",
+    goalRub: 50_000,
+    raisedRub: 300,
+    pct: 1,
+  });
+
+  const auth = useWarriorAuth();
+  const viewerId =
+    auth.status === "authenticated" ? auth.user.id : undefined;
+
   const totalXpRef = useRef(0);
 
   const [totalXp, setTotalXp] = useState(0);
@@ -200,6 +226,72 @@ export function WarriorPassport({ fighterId }: { fighterId: string }) {
 
   useEffect(() => {
     setAdminMode(isWarriorAdminMode());
+  }, []);
+
+  useEffect(() => {
+    if (!remoteBootstrapped) return;
+    const client = createWarriorBrowserClient();
+    if (!client) return;
+    void fetchFundraiserProgress(client, fighterId).then(setFundraiser);
+    if (!viewerId) return;
+    void client
+      .from("profiles")
+      .select("balance")
+      .eq("id", viewerId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data && "balance" in data) {
+          setDonorBalance(Number(data.balance) || 0);
+        }
+      });
+  }, [fighterId, remoteBootstrapped, viewerId]);
+
+  const submitDonate: DonatePaymentHandler = useCallback(
+    async (amount, comment) => {
+      const client = createWarriorBrowserClient();
+      if (!client || !viewerId) {
+        setDonateError("Войди в аккаунт для доната");
+        return null;
+      }
+      setDonateBusy(true);
+      setDonateError(null);
+      const result = await handleDonate(client, {
+        donorId: viewerId,
+        recipientId: fighterId,
+        grossRub: amount,
+        comment,
+      });
+      setDonateBusy(false);
+      if (!result.ok) {
+        setDonateError(result.message);
+        return null;
+      }
+      setDonorBalance(result.newDonorBalance);
+      setIsDonateModalOpen(false);
+      setLedgerEcho({
+        tone: "ok",
+        message: `Донат ${amount.toLocaleString("ru-RU")} ₽ · бойцу +${result.breakdown.net.toLocaleString("ru-RU")} ₽`,
+      });
+      const progress = await fetchFundraiserProgress(client, fighterId);
+      setFundraiser(progress);
+      return {
+        grossRub: amount,
+        netRub: result.breakdown.net,
+        newDonorBalance: result.newDonorBalance,
+        donationId: result.donationId,
+      };
+    },
+    [fighterId, viewerId],
+  );
+
+  const closeDonateModal = useCallback((): void => {
+    setIsDonateModalOpen(false);
+    setDonateError(null);
+  }, []);
+
+  const pickTrainingType = useCallback((label: string): void => {
+    setTrainingMenuOpen(false);
+    setLedgerEcho({ tone: "ok", message: `${label} · заявка принята` });
   }, []);
 
   useEffect(() => {
@@ -465,6 +557,69 @@ export function WarriorPassport({ fighterId }: { fighterId: string }) {
                 showPlaylist
                 metatronRole={role === "coach" ? "coach" : "fighter"}
                 videoSrc={isDemo ? "https://vk.com/video-190459948_456239028" : undefined}
+              />
+
+              {/* ── Under-octagon client stack (splits tab logic untouched) ── */}
+              <div className="flex w-full max-w-[300px] flex-col gap-2.5">
+                <motion.button
+                  type="button"
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setTrainingMenuOpen((open) => !open)}
+                  className="w-full rounded-2xl border-2 border-cyan-400/70 bg-transparent px-4 py-3.5 font-[family-name:var(--font-geist-mono)] text-[10px] font-extrabold uppercase tracking-[0.22em] text-cyan-200"
+                  style={{ boxShadow: "0 0 28px -8px rgba(0,240,255,0.55)" }}
+                >
+                  Записаться на тренировку
+                </motion.button>
+
+                <AnimatePresence>
+                  {trainingMenuOpen ? (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden rounded-xl border border-white/[0.1] bg-black/70"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => pickTrainingType("Персональная 1-на-1")}
+                        className="block w-full border-b border-white/[0.06] px-4 py-3 text-left font-[family-name:var(--font-geist-sans)] text-[13px] text-white hover:bg-white/[0.04]"
+                      >
+                        Персональная 1-на-1
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => pickTrainingType("Групповая по расписанию")}
+                        className="block w-full px-4 py-3 text-left font-[family-name:var(--font-geist-sans)] text-[13px] text-white hover:bg-white/[0.04]"
+                      >
+                        Групповая по расписанию
+                      </button>
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
+
+                <button
+                  type="button"
+                  onClick={() => setIsDonateModalOpen(true)}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/40 bg-emerald-500/[0.08] px-4 py-3 font-[family-name:var(--font-geist-mono)] text-[9px] font-bold uppercase tracking-[0.2em] text-emerald-200 transition-colors hover:bg-emerald-500/[0.14]"
+                >
+                  <SbpMiniGlyph />
+                  Поддержать бойца
+                  <span className="text-[8px] font-semibold tracking-[0.14em] text-emerald-400/80">
+                    через СБП
+                  </span>
+                </button>
+              </div>
+
+              <DonateModal
+                open={isDonateModalOpen}
+                onClose={closeDonateModal}
+                fighterName={profileDisplayName}
+                fighterInitials={profileInitials}
+                fundraiser={fundraiser}
+                donorBalance={donorBalance}
+                busy={donateBusy}
+                error={donateError}
+                onDonate={submitDonate}
               />
 
               <div className="min-w-0 flex-1 text-center sm:text-left">
@@ -789,6 +944,15 @@ export function WarriorPassport({ fighterId }: { fighterId: string }) {
 }
 
 /* ───────────────────── sub‑components ───────────────────── */
+
+function SbpMiniGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" width={14} height={14} aria-hidden>
+      <rect x="2" y="5" width="20" height="14" rx="3" fill="#1a1a2e" stroke="#5eead4" strokeWidth="1.2" />
+      <path d="M6 10 H18 M6 14 H13" stroke="#5eead4" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 function GiftGlyph({ className }: { className?: string }) {
   return (

@@ -4,6 +4,7 @@ import Script from "next/script";
 import { CyberNav } from "@/components/cyber-nav";
 import { TelegramTheme } from "@/components/telegram-theme";
 import { PwaInstallBanner } from "@/components/pwa-install-banner";
+import { Providers } from "./providers";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -23,14 +24,13 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Warrior Point",
-  description: "Global combat ledger · Warrior Passport · Leaderboard",
-  // PWA / TWA meta
+  title: "Round 23 — Видео",
+  description: "Агрегатор видео единоборств",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Warrior Point",
+    title: "Round 23",
   },
   formatDetection: { telephone: false },
   other: {
@@ -45,8 +45,8 @@ export const viewport: Viewport = {
   userScalable: false,
   viewportFit: "cover",          // safe-area for notched iPhones
   themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#00F0FF" },
-    { media: "(prefers-color-scheme: light)", color: "#00F0FF" },
+    { media: "(prefers-color-scheme: dark)", color: "#C9A84C" },
+    { media: "(prefers-color-scheme: light)", color: "#C9A84C" },
   ],
 };
 
@@ -68,7 +68,7 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
       </head>
       <body
-        className="flex min-h-full flex-col overflow-x-hidden bg-zinc-950 text-zinc-100"
+        className="min-h-full bg-[#0A0A0A] text-zinc-100 antialiased"
         style={{ WebkitTapHighlightColor: "transparent" }}
       >
         {/*
@@ -83,7 +83,7 @@ export default function RootLayout({
         {/* Reads Telegram theme and sets --tg-* CSS vars on :root */}
         <TelegramTheme />
 
-        <div className="flex flex-1 flex-col">{children}</div>
+        <Providers>{children}</Providers>
         <CyberNav />
         <PwaInstallBanner />
       </body>

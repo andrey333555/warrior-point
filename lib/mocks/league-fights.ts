@@ -108,3 +108,9 @@ export const LEAGUE_FIGHTS: Record<string, readonly LeagueFight[]> = {
 export function fightsForLeague(orgId: string): readonly LeagueFight[] {
   return LEAGUE_FIGHTS[orgId] ?? [];
 }
+
+export function getLatestFight(): LeagueFight | null {
+  const all = Object.values(LEAGUE_FIGHTS).flat();
+  if (all.length === 0) return null;
+  return [...all].sort((a, b) => b.date.localeCompare(a.date))[0] ?? null;
+}

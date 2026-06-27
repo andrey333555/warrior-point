@@ -28,14 +28,14 @@ import { AnimatePresence, motion } from "framer-motion";
 
 type Platform = "youtube" | "vk" | "rutube" | "direct";
 
-type VideoSource = {
+export type ParsedVideoSource = {
   platform: Platform;
   embedUrl: string;
   /** Auto-derived thumbnail URL when the platform exposes one. */
   thumbnailUrl?: string;
 };
 
-function parseVideoUrl(raw: string): VideoSource | null {
+export function parseVideoUrl(raw: string): ParsedVideoSource | null {
   try {
     // YouTube — watch?v=ID or youtu.be/ID or shorts/ID or embed/ID
     const yt = raw.match(
@@ -110,7 +110,7 @@ function VideoModal({
   caption,
   onClose,
 }: {
-  source: VideoSource;
+  source: ParsedVideoSource;
   accent: string;
   caption: string;
   onClose: () => void;

@@ -2,13 +2,26 @@
 
 import { useEffect, useState } from "react";
 import type { User, Session } from "@supabase/supabase-js";
+import { useSession, signOut as nextAuthSignOut } from "next-auth/react";
+import type { Session as NextAuthSession } from "next-auth";
 import { createWarriorBrowserClient } from "@/lib/supabase/client";
 import { DEMO_FIGHTER_DB_ID } from "@/lib/warrior-constants";
 
 export type AuthState =
   | { status: "loading" }
   | { status: "unauthenticated" }
-  | { status: "authenticated"; user: User; session: Session; devBypass?: true };
+  | {
+      status: "authenticated";
+      user: User;
+      session: Session;
+      devBypass?: true;
+      oauth?: true;
+    };
+
+type SupabaseAuthState =
+  | { status: "loading" }
+  | { status: "unauthenticated" }
+  | { status: "authenticated"; user: User; session: Session };
 
 // ── Dev bypass ────────────────────────────────────────────────────────────────
 
@@ -18,10 +31,8 @@ export const DEV_BYPASS_KEY = "wp_dev_bypass";
 export function activateDevBypass(): void {
   try {
     localStorage.setItem(DEV_BYPASS_KEY, "1");
-    // Dispatch a custom event so useWarriorAuth reacts without a full reload
     window.dispatchEvent(new CustomEvent("wp:dev-bypass"));
   } catch {
-    // localStorage unavailable — just reload
     location.reload();
   }
 }
@@ -45,7 +56,6 @@ export function isDevBypassActive(): boolean {
   }
 }
 
-/** Synthetic User object that stands in for the demo fighter in bypass mode. */
 function makeDemoUser(): User {
   return {
     id: DEMO_FIGHTER_DB_ID,
@@ -58,90 +68,98 @@ function makeDemoUser(): User {
   } as unknown as User;
 }
 
-function makeDemoSession(user: User): Session {
+function makeSyntheticSession(user: User): Session {
   return {
-    access_token: "dev-bypass-token",
-    refresh_token: "dev-bypass-refresh",
+    access_token: "synthetic-token",
+    refresh_token: "synthetic-refresh",
     expires_in: 3600,
     token_type: "bearer",
     user,
   } as unknown as Session;
 }
 
+function oauthSessionToAuthState(oauthSession: NextAuthSession): AuthState {
+  const oauthUser = oauthSession.user;
+  const userId = oauthUser.id ?? oauthUser.email ?? "oauth-user";
+  const user = {
+    id: userId,
+    aud: "authenticated",
+    role: "authenticated",
+    email: oauthUser.email ?? undefined,
+    created_at: new Date().toISOString(),
+    app_metadata: { provider: "next-auth" },
+    user_metadata: { full_name: oauthUser.name ?? oauthUser.email ?? "Воин" },
+  } as unknown as User;
+
+  return {
+    status: "authenticated",
+    user,
+    session: makeSyntheticSession(user),
+    oauth: true,
+  };
+}
+
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useWarriorAuth(): AuthState {
-  const [state, setState] = useState<AuthState>(() => {
-    // Immediate bypass check — skip the "loading" flash if flag is already set
-    if (isDevBypassActive()) {
-      const user = makeDemoUser();
-      return { status: "authenticated", user, session: makeDemoSession(user), devBypass: true };
-    }
-    return { status: "loading" };
-  });
+  const { data: oauthSession, status: oauthStatus } = useSession();
+  const [devBypass, setDevBypass] = useState(isDevBypassActive);
+  const [supabaseAuth, setSupabaseAuth] = useState<SupabaseAuthState>(() =>
+    isDevBypassActive() ? { status: "loading" } : { status: "loading" },
+  );
 
   useEffect(() => {
-    // ── Handle dev bypass events (same tab) ─────────────────────────────────
     function onBypassOn() {
-      const user = makeDemoUser();
-      setState({
-        status: "authenticated",
-        user,
-        session: makeDemoSession(user),
-        devBypass: true,
-      });
+      setDevBypass(true);
     }
     function onBypassOff() {
-      setState({ status: "loading" });
-      // Re-run real auth flow after clearing
-      void initRealAuth();
+      setDevBypass(false);
+      setSupabaseAuth({ status: "loading" });
     }
 
     window.addEventListener("wp:dev-bypass", onBypassOn);
     window.addEventListener("wp:dev-bypass-off", onBypassOff);
 
-    // If already in bypass, nothing more to do
-    if (isDevBypassActive()) {
+    if (devBypass) {
       return () => {
         window.removeEventListener("wp:dev-bypass", onBypassOn);
         window.removeEventListener("wp:dev-bypass-off", onBypassOff);
       };
     }
 
-    // ── Normal Supabase auth flow ────────────────────────────────────────────
     let unsubscribe: (() => void) | null = null;
 
-    async function initRealAuth() {
+    async function initSupabaseAuth() {
       const client = createWarriorBrowserClient();
       if (!client) {
-        setState({ status: "unauthenticated" });
+        setSupabaseAuth({ status: "unauthenticated" });
         return;
       }
 
       const { data } = await client.auth.getSession();
-      if (isDevBypassActive()) return; // bypass was activated while awaiting
+      if (isDevBypassActive()) return;
 
       if (data.session?.user) {
-        setState({
+        setSupabaseAuth({
           status: "authenticated",
           user: data.session.user,
           session: data.session,
         });
       } else {
-        setState({ status: "unauthenticated" });
+        setSupabaseAuth({ status: "unauthenticated" });
       }
 
       const { data: listener } = client.auth.onAuthStateChange(
         (_event, session) => {
           if (isDevBypassActive()) return;
           if (session?.user) {
-            setState({
+            setSupabaseAuth({
               status: "authenticated",
               user: session.user,
               session,
             });
           } else {
-            setState({ status: "unauthenticated" });
+            setSupabaseAuth({ status: "unauthenticated" });
           }
         },
       );
@@ -149,21 +167,39 @@ export function useWarriorAuth(): AuthState {
       unsubscribe = () => listener.subscription.unsubscribe();
     }
 
-    void initRealAuth();
+    void initSupabaseAuth();
 
     return () => {
       unsubscribe?.();
       window.removeEventListener("wp:dev-bypass", onBypassOn);
       window.removeEventListener("wp:dev-bypass-off", onBypassOff);
     };
-  }, []);
+  }, [devBypass]);
 
-  return state;
+  if (devBypass) {
+    const user = makeDemoUser();
+    return {
+      status: "authenticated",
+      user,
+      session: makeSyntheticSession(user),
+      devBypass: true,
+    };
+  }
+
+  if (oauthStatus === "loading" || supabaseAuth.status === "loading") {
+    return { status: "loading" };
+  }
+
+  if (oauthSession?.user) {
+    return oauthSessionToAuthState(oauthSession);
+  }
+
+  return supabaseAuth;
 }
 
 export async function signOutWarrior() {
-  // Clear dev bypass on sign-out so we don't get stuck
   deactivateDevBypass();
+  await nextAuthSignOut({ redirect: false });
   const client = createWarriorBrowserClient();
   if (!client) return;
   await client.auth.signOut();

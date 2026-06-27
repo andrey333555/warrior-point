@@ -1,13 +1,13 @@
 {
-  "name": "Warrior Point",
-  "short_name": "WarriorPoint",
-  "description": "Global combat ledger · Fighter Passport · БК Кузня",
+  "name": "Round 23 — Видео",
+  "short_name": "Round 23",
+  "description": "Агрегатор видео единоборств",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#000000",
-  "theme_color": "#00F0FF",
+  "background_color": "#0A0A0A",
+  "theme_color": "#C9A84C",
   "icons": [
     {
       "src": "/icon-192.png",

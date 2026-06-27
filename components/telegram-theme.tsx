@@ -13,7 +13,7 @@
  * Safe in non-Telegram environments: checks window.Telegram before calling.
  */
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 // ── Telegram Web App global type ──────────────────────────────────────────────
 
@@ -42,6 +42,7 @@ interface TgWebApp {
   headerColor: string;
   themeParams: TgThemeParams;
   isExpanded: boolean;
+  initData?: string;
   viewportHeight: number;
   viewportStableHeight: number;
   onEvent: (event: string, handler: () => void) => void;
@@ -118,6 +119,11 @@ export function TelegramTheme() {
 
 /** Returns true when running inside Telegram (client-side only). */
 export function useIsTelegram(): boolean {
-  if (typeof window === "undefined") return false;
-  return Boolean(window.Telegram?.WebApp);
+  const [inside, setInside] = useState(false);
+
+  useEffect(() => {
+    setInside(Boolean(window.Telegram?.WebApp));
+  }, []);
+
+  return inside;
 }
