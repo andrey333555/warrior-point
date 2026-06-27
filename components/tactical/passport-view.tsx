@@ -11,7 +11,6 @@
 
 import { AnimatePresence, animate, motion, useMotionValue, useTransform } from "framer-motion";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RoundMini } from "@/components/RoundProgress";
 import { FightsList } from "@/components/fights-list";
@@ -549,7 +548,6 @@ export function PassportView({
   onPlayVideo?: (video: Video) => void;
   onApplyTraining?: () => void;
 }) {
-  const router = useRouter();
   const accent = ROLE_ACCENT[role];
   const glow = stats.isWinner && role === "fighter" ? "#facc15" : accent;
 
@@ -608,27 +606,12 @@ export function PassportView({
         className="mx-5 rounded-2xl border border-white/[0.08] bg-zinc-900/60 p-3"
       >
         <RoundMini xp={totalXp} />
-        <div className="mt-3 flex gap-2">
-          <Link
-            href="/levels"
-            className={`flex-1 rounded-xl border border-white/10 bg-white/[0.04] py-2.5 text-center font-[family-name:var(--font-jetbrains-mono)] text-[10px] font-semibold uppercase tracking-[0.12em] text-neutral-300 ${EASE} hover:bg-white/[0.08]`}
-          >
-            Раунды
-          </Link>
-          <button
-            type="button"
-            onClick={() => router.push("/vip")}
-            className={`flex-1 rounded-xl py-2.5 text-center font-[family-name:var(--font-jetbrains-mono)] text-[10px] font-semibold uppercase tracking-[0.12em] ${EASE} hover:opacity-90`}
-            style={{
-              background: "rgba(201,168,76,0.15)",
-              color: "#C9A84C",
-              border: "0.5px solid rgba(201,168,76,0.35)",
-              boxShadow: "0 0 16px -6px rgba(201,168,76,0.35)",
-            }}
-          >
-            ⚡ Стать VIP
-          </button>
-        </div>
+        <Link
+          href="/levels"
+          className={`mt-3 block rounded-xl border border-white/10 bg-white/[0.04] py-2.5 text-center font-[family-name:var(--font-jetbrains-mono)] text-[10px] font-semibold uppercase tracking-[0.12em] text-neutral-300 ${EASE} hover:bg-white/[0.08]`}
+        >
+          Раунды
+        </Link>
       </motion.div>
 
       <motion.div {...sectionMotion(0.05)} className="relative shrink-0">

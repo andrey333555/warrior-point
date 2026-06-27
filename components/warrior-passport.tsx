@@ -1,7 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -803,19 +801,6 @@ export function WarriorPassport({ fighterId }: { fighterId: string }) {
             <div className="mt-7 space-y-5">
               <RoundBadge xp={totalXp} />
               <RoundProgress xp={totalXp} showSources />
-              <button
-                type="button"
-                onClick={() => router.push("/vip")}
-                className="flex w-full items-center justify-center rounded-xl py-3 font-[family-name:var(--font-jetbrains-mono)] text-[11px] font-semibold uppercase tracking-[0.18em] transition-opacity hover:opacity-90"
-                style={{
-                  background: "rgba(201,168,76,0.15)",
-                  color: "#C9A84C",
-                  border: "0.5px solid rgba(201,168,76,0.35)",
-                  boxShadow: "0 0 20px -8px rgba(201,168,76,0.35)",
-                }}
-              >
-                ⚡ Стать VIP
-              </button>
               <XpBar
                 level={bracket.level}
                 maxLevel={MAX_LEVEL}
