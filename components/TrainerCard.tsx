@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import type { Trainer, TrainingType } from "@/lib/data";
+import type { Trainer, TrainingType } from "@/lib/network";
 
 type TrainerCardProps = {
   trainer: Trainer;
@@ -18,8 +18,14 @@ export default function TrainerCard({
 
   return (
     <div className="rounded-2xl bg-zinc-900 p-4">
-      <h3 className="text-lg font-semibold text-white">{trainer.name}</h3>
-      <p className="mt-1 text-sm text-gray-400">{trainer.experience} опыта</p>
+      <button
+        type="button"
+        onClick={() => router.push(`/trainer/${trainer.id}`)}
+        className="text-left"
+      >
+        <h3 className="text-lg font-semibold text-white">{trainer.name}</h3>
+        <p className="mt-1 text-sm text-gray-400">{trainer.experience} опыта</p>
+      </button>
 
       {onSelectSplit ? (
         <div className="mt-3 space-y-2">
@@ -52,7 +58,7 @@ export default function TrainerCard({
               <p className="text-xs text-gray-400">{t.duration}</p>
               <button
                 type="button"
-                onClick={() => router.push("/booking")}
+                onClick={() => router.push(`/booking/${trainer.id}`)}
                 className="text-sm font-semibold text-yellow-400"
               >
                 {t.price}₽

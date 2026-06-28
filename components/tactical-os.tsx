@@ -32,7 +32,7 @@ import {
   type PassportStats,
   type PassportEcon,
 } from "@/components/tactical/passport-view";
-import { LeaderboardView } from "@/components/tactical/leaderboard-view";
+import Leaderboard from "@/components/leaderboard";
 import { FeedLayout } from "@/components/feed/FeedLayout";
 import { FeedStream } from "@/components/feed/FeedStream";
 import type { FeedCategory } from "@/components/feed/types";
@@ -270,11 +270,7 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
                 onApplyTraining={onApplyTraining}
               />
             ) : (
-              <LeaderboardView
-                currentUserId={fighterId}
-                roleAccent={ROLE_ACCENT[role]}
-                weightClass={role === "coach" ? "ALL DIVISIONS" : "LIGHTWEIGHT"}
-              />
+              <Leaderboard />
             )}
           </motion.div>
         </AnimatePresence>

@@ -4,14 +4,16 @@ import TrainerCard from "./TrainerCard";
 import ScheduleDates from "./ScheduleDates";
 import ScheduleTimes from "./ScheduleTimes";
 import BookingSummary from "./BookingSummary";
-import { trainers } from "@/lib/data";
+import { getTrainersForGym, trainers as allTrainers } from "@/lib/network";
 
 type GymTrainersProps = {
   gymName: string;
+  gymId?: number;
 };
 
-export default function GymTrainers({ gymName }: GymTrainersProps) {
-  const trainingPrice = trainers[0]?.trainings[0]?.price ?? 1500;
+export default function GymTrainers({ gymName, gymId }: GymTrainersProps) {
+  const gymTrainers = gymId != null ? getTrainersForGym(gymId) : allTrainers;
+  const trainingPrice = gymTrainers[0]?.trainings[0]?.price ?? 1500;
 
   return (
     <div className="mt-6">
@@ -19,7 +21,7 @@ export default function GymTrainers({ gymName }: GymTrainersProps) {
       <ScheduleTimes />
 
       <div className="mt-4">
-        {trainers.map((t) => (
+        {gymTrainers.map((t) => (
           <TrainerCard key={t.id} trainer={t} />
         ))}
       </div>

@@ -165,54 +165,26 @@ export function findGymListingByName(name: string): GymListing | undefined {
   return GYMS.find((g) => g.name === name);
 }
 
-// ── Trainers & training types ───────────────────────────────────────────────
+// ── Trainers & network (Gym ↔ Trainer ↔ Fighter) ────────────────────────────
 
-export type TrainingType = {
-  id: string;
-  name: string;
-  duration: string;
-  price: number;
-  fitsYou?: string[];
-};
-
-export type Trainer = {
-  id: string;
-  name: string;
-  experience: string;
-  trainings: TrainingType[];
-};
-
-export const trainers: Trainer[] = [
-  {
-    id: "1",
-    name: "Иван Дроздов",
-    experience: "12 лет",
-    trainings: [
-      {
-        id: "t1",
-        name: "Ударка",
-        duration: "60 мин",
-        price: 1500,
-        fitsYou: [
-          "хочешь улучшить ударку",
-          "готов тренироваться 2-3 раза в неделю",
-        ],
-      },
-      {
-        id: "t2",
-        name: "Борьба",
-        duration: "60 мин",
-        price: 1500,
-      },
-      {
-        id: "t3",
-        name: "Персональная",
-        duration: "60 мин",
-        price: 3000,
-      },
-    ],
-  },
-];
+export type { TrainingType, Gym, Trainer, Fighter } from "@/lib/network";
+export {
+  gyms,
+  trainers,
+  fighters,
+  findGym,
+  findTrainer,
+  findFighter,
+  getGymName,
+  getGymsForTrainer,
+  getTrainersForGym,
+  getFightersForGym,
+  getFightersForTrainer,
+  DEFAULT_TRAINER_IMAGE,
+  DEFAULT_FIGHTER_IMAGE,
+  DEFAULT_GYM_IMAGE,
+  bookingGym,
+} from "@/lib/network";
 
 export type ScheduleDate = {
   id: string;
@@ -250,11 +222,6 @@ export const inspiredFighter: InspiredFighter = {
   id: "cobra",
   name: "Cobra",
   tag: "Striker · UFC",
-};
-
-export const bookingGym = {
-  id: "tiger-gym",
-  name: "Tiger Gym",
 };
 
 export const bookingDates = ["Сегодня", "Завтра", "25 июн", "26 июн"] as const;
