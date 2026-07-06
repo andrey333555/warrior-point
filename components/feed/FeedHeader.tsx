@@ -78,7 +78,7 @@ export function FeedHeader({
             boxShadow: "0 0 12px -4px rgba(201,168,76,0.4)",
           }}
         >
-          ⚡ Стать VIP
+          ⚡ Стать выше
         </button>
         <button
           type="button"

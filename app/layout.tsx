@@ -4,6 +4,7 @@ import Script from "next/script";
 import { CyberNav } from "@/components/cyber-nav";
 import { TelegramTheme } from "@/components/telegram-theme";
 import { PwaInstallBanner } from "@/components/pwa-install-banner";
+import { StoreInit } from "@/components/StoreInit";
 import { Providers } from "./providers";
 import "./globals.css";
 
@@ -83,6 +84,7 @@ export default function RootLayout({
         {/* Reads Telegram theme and sets --tg-* CSS vars on :root */}
         <TelegramTheme />
 
+        <StoreInit />
         <Providers>{children}</Providers>
         <CyberNav />
         <PwaInstallBanner />

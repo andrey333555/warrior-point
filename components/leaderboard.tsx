@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { fighters, getGymName, findTrainer, findGym, type Fighter } from "@/lib/fighters";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 
 function cloneFighters() {
   return fighters.map((f) => ({ ...f }));
@@ -66,26 +67,25 @@ function CompareDrawer({
         </div>
 
         <div className="mt-5 grid grid-cols-2 gap-3">
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            fullWidth
             onClick={() => {
               onClose();
               router.push(`/gym/${fighter.gyms[0]}`);
             }}
-            className="rounded-xl border border-zinc-700 bg-zinc-900 py-3 text-sm text-white transition-colors hover:bg-zinc-800"
           >
             🏟 {gym?.name ?? "Зал"}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            fullWidth
             onClick={() => {
               onClose();
               router.push(`/booking/${fighter.trainerId}`);
             }}
-            className="rounded-xl bg-yellow-400 py-3 text-sm font-semibold text-black"
           >
             Тренироваться
-          </button>
+          </Button>
         </div>
       </motion.div>
     </motion.div>
@@ -184,21 +184,24 @@ export default function Leaderboard() {
               </div>
 
               <div className="mt-3 flex gap-2">
-                <button
-                  type="button"
+                <Button
+                  size="sm"
+                  fullWidth
+                  className="flex-1"
                   onClick={() => router.push(`/booking/${f.trainerId}`)}
-                  className="flex-1 rounded-xl bg-yellow-400 py-2.5 text-sm font-semibold text-black"
                 >
                   Тренироваться
-                </button>
+                </Button>
 
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  fullWidth
+                  className="flex-1"
                   onClick={() => setComparing(f)}
-                  className="flex-1 rounded-xl bg-zinc-800 py-2.5 text-sm text-white transition-colors hover:bg-zinc-700"
                 >
                   Сравнить
-                </button>
+                </Button>
               </div>
             </motion.div>
           ))}

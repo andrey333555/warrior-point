@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 import {
   DEFAULT_FIGHTER_IMAGE,
   DEFAULT_GYM_IMAGE,
@@ -194,18 +195,18 @@ export default function NetworkGymPage({ gym }: { gym: Gym }) {
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 border-t border-white/[0.06] bg-black/95 p-4 backdrop-blur-md">
-        <button
-          type="button"
+        <Button
+          fullWidth
+          size="lg"
           onClick={() => {
             const firstTrainer = gymTrainers[0];
             if (firstTrainer) {
               router.push(`/booking/${firstTrainer.id}`);
             }
           }}
-          className="w-full rounded-xl bg-yellow-400 py-3 font-semibold text-black"
         >
           Записаться в зал
-        </button>
+        </Button>
       </div>
     </div>
   );

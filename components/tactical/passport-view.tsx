@@ -22,6 +22,19 @@ import {
 import { findOrg } from "@/data/organisations";
 import { createWarriorBrowserClient } from "@/lib/supabase/client";
 import { syncWithSherdog, type SherdogSyncStatus } from "@/lib/sherdog-sync";
+import {
+  fetchFundraiserProgress,
+  handleDonate,
+  type FundraiserProgress,
+} from "@/lib/supabase/donations";
+import { donateSettlement } from "@/lib/economy";
+import { deriveInitials } from "@/lib/supabase/provision-user";
+import { DEMO_FIGHTER_INITIALS } from "@/lib/warrior-constants";
+import {
+  DonateModal,
+  SupportFighterButton,
+  type DonatePaymentHandler,
+} from "@/components/donate-modal";
 import { PassportHero } from "@/components/tactical/fighter-hero-banner";
 import type { Video } from "@/lib/data";
 
@@ -46,6 +59,7 @@ export type PassportStats = {
   isWinner: boolean;
   badges?: string[];
   aiAnalysis?: string;
+  portraitSrc?: string;
 };
 
 export type PassportEcon = {
@@ -135,15 +149,6 @@ function AnimatedProRecord({ proRecord }: { proRecord: string }) {
   );
 }
 
-function deriveInitials(name: string): string {
-  return name
-    .split(/\s+/)
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
-
 function fightToVideo(fight: LeagueFight, fighterName: string): Video {
   const org = findOrg(fight.orgId);
   return {
@@ -227,6 +232,7 @@ function PassportTop({
   accent,
   isWinner,
   role,
+  portraitSrc,
 }: {
   name: string;
   nickname?: string;
@@ -235,6 +241,7 @@ function PassportTop({
   accent: string;
   isWinner: boolean;
   role: RoleMode;
+  portraitSrc?: string;
 }) {
   const displayName = nickname?.toUpperCase() ?? name.toUpperCase();
   const status =
@@ -256,9 +263,18 @@ function PassportTop({
             }`}
           />
           <div
-            className={`relative flex h-14 w-14 items-center justify-center rounded-full border border-white/20 bg-black text-sm font-semibold text-white ${EASE}`}
+            className={`relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-black text-sm font-semibold text-white ${EASE}`}
           >
-            {deriveInitials(name)}
+            {portraitSrc ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={portraitSrc}
+                alt={name}
+                className="h-full w-full object-cover object-[center_20%]"
+              />
+            ) : (
+              deriveInitials(name)
+            )}
           </div>
         </div>
         <div className="min-w-0 flex-1">
@@ -483,10 +499,12 @@ function PersonalTrainingCard({ onApply }: { onApply?: () => void }) {
 function LastFightPreview({
   fight,
   fighterName,
+  portraitSrc,
   onPlay,
 }: {
   fight: LeagueFight;
   fighterName: string;
+  portraitSrc?: string;
   onPlay?: (video: Video) => void;
 }) {
   const handlePlay = () => {
@@ -510,7 +528,10 @@ function LastFightPreview({
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="https://images.unsplash.com/photo-1599058917765-a780eda07a3e?w=800&q=80"
+          src={
+            portraitSrc ??
+            "https://images.unsplash.com/photo-1599058917765-a780eda07a3e?w=800&q=80"
+          }
           alt={`Тренировка с ${displayName}`}
           className={`h-[160px] w-full object-cover ${EASE} group-hover:scale-[1.02]`}
         />
@@ -534,19 +555,23 @@ export function PassportView({
   stats,
   econ,
   fighterId,
+  viewerId,
   totalXp = 0,
   onCreateSplit,
   onPlayVideo,
   onApplyTraining,
+  onDonateSuccess,
 }: {
   role: RoleMode;
   stats: PassportStats;
   econ: PassportEcon;
   fighterId?: string;
+  viewerId?: string;
   totalXp?: number;
   onCreateSplit?: () => void;
   onPlayVideo?: (video: Video) => void;
   onApplyTraining?: () => void;
+  onDonateSuccess?: (message: string) => void;
 }) {
   const accent = ROLE_ACCENT[role];
   const glow = stats.isWinner && role === "fighter" ? "#facc15" : accent;
@@ -555,6 +580,21 @@ export function PassportView({
   const [sherdogStatus, setSherdogStatus] = useState<SherdogSyncStatus>("idle");
   const [liveRecord, setLiveRecord] = useState(stats.proRecord);
   const [liveElo, setLiveElo] = useState(stats.elo);
+  const [isDonateModalOpen, setIsDonateModalOpen] = useState(false);
+  const [donateBusy, setDonateBusy] = useState(false);
+  const [donateError, setDonateError] = useState<string | null>(null);
+  const [donorBalance, setDonorBalance] = useState(15_000);
+  const [fundraiser, setFundraiser] = useState<FundraiserProgress>({
+    title: "На сборы в Дагестан",
+    goalRub: 50_000,
+    raisedRub: 300,
+    pct: 1,
+  });
+
+  const fighterInitials = useMemo(
+    () => (stats.name ? deriveInitials(stats.name) : DEMO_FIGHTER_INITIALS),
+    [stats.name],
+  );
 
   const latestFight = useMemo(() => getLatestFight(), []);
 
@@ -581,6 +621,91 @@ export function PassportView({
     setLiveElo(stats.elo);
   }, [stats.proRecord, stats.elo]);
 
+  useEffect(() => {
+    const client = createWarriorBrowserClient();
+    if (!client || !fighterId) return;
+
+    void fetchFundraiserProgress(client, fighterId).then(setFundraiser);
+
+    if (viewerId) {
+      void client
+        .from("profiles")
+        .select("balance")
+        .eq("id", viewerId)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data && "balance" in data) {
+            setDonorBalance(Number(data.balance) || 0);
+          }
+        });
+    }
+  }, [fighterId, viewerId]);
+
+  const submitDonate: DonatePaymentHandler = useCallback(
+    async (amount, comment) => {
+      const client = createWarriorBrowserClient();
+      if (!client || !viewerId || !fighterId) {
+        setDonateError("Войди в аккаунт для доната");
+        return null;
+      }
+      setDonateBusy(true);
+      setDonateError(null);
+      const result = await handleDonate(client, {
+        donorId: viewerId,
+        recipientId: fighterId,
+        grossRub: amount,
+        comment,
+      });
+      setDonateBusy(false);
+      if (!result.ok) {
+        if (
+          process.env.NODE_ENV === "development" &&
+          (result.code === "SELF_DONATE" || result.code === "DB_ERROR")
+        ) {
+          const breakdown = donateSettlement(amount);
+          setIsDonateModalOpen(false);
+          setFundraiser((prev) => {
+            const raisedRub = prev.raisedRub + breakdown.net;
+            return {
+              ...prev,
+              raisedRub,
+              pct: Math.min(100, Math.round((raisedRub / prev.goalRub) * 100)),
+            };
+          });
+          onDonateSuccess?.(
+            `Донат ${amount.toLocaleString("ru-RU")} ₽ · бойцу +${breakdown.net.toLocaleString("ru-RU")} ₽`,
+          );
+          return {
+            grossRub: amount,
+            netRub: breakdown.net,
+            newDonorBalance: Math.max(0, donorBalance - amount),
+          };
+        }
+        setDonateError(result.message);
+        return null;
+      }
+      setDonorBalance(result.newDonorBalance);
+      setIsDonateModalOpen(false);
+      const progress = await fetchFundraiserProgress(client, fighterId);
+      setFundraiser(progress);
+      onDonateSuccess?.(
+        `Донат ${amount.toLocaleString("ru-RU")} ₽ · бойцу +${result.breakdown.net.toLocaleString("ru-RU")} ₽`,
+      );
+      return {
+        grossRub: amount,
+        netRub: result.breakdown.net,
+        newDonorBalance: result.newDonorBalance,
+        donationId: result.donationId,
+      };
+    },
+    [fighterId, viewerId, onDonateSuccess, donorBalance],
+  );
+
+  const closeDonateModal = useCallback(() => {
+    setIsDonateModalOpen(false);
+    setDonateError(null);
+  }, []);
+
   const statPairs = statsPairsFor(role, stats, econ);
 
   const handleLeagueClick = (id: string) => {
@@ -598,6 +723,7 @@ export function PassportView({
           accent={accent}
           isWinner={stats.isWinner}
           role={role}
+          portraitSrc={stats.portraitSrc}
         />
       </motion.div>
 
@@ -615,7 +741,7 @@ export function PassportView({
       </motion.div>
 
       <motion.div {...sectionMotion(0.05)} className="relative shrink-0">
-        <PassportHero glowColor={glow} />
+        <PassportHero glowColor={glow} imageSrc={stats.portraitSrc} heightClass="h-[240px]" />
         {role === "fighter" ? (
           <AnimatePresence mode="wait">
             <motion.div
@@ -663,6 +789,12 @@ export function PassportView({
             />
           </motion.div>
         </AnimatePresence>
+      ) : null}
+
+      {role === "fighter" && fighterId ? (
+        <motion.div {...sectionMotion(0.07)} className="mx-5 flex justify-center">
+          <SupportFighterButton onClick={() => setIsDonateModalOpen(true)} />
+        </motion.div>
       ) : null}
 
       <AnimatePresence mode="popLayout">
@@ -723,10 +855,23 @@ export function PassportView({
           <LastFightPreview
             fight={latestFight}
             fighterName={stats.nickname ?? stats.name}
+            portraitSrc={stats.portraitSrc}
             onPlay={onPlayVideo}
           />
         </motion.div>
       ) : null}
+
+      <DonateModal
+        open={isDonateModalOpen}
+        onClose={closeDonateModal}
+        fighterName={stats.name}
+        fighterInitials={fighterInitials}
+        fundraiser={fundraiser}
+        donorBalance={donorBalance}
+        busy={donateBusy}
+        error={donateError}
+        onDonate={submitDonate}
+      />
     </div>
   );
 }

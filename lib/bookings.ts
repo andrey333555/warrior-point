@@ -1,18 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { trainers } from "@/lib/network";
+import { clientInitial } from "@/lib/client-store";
+import { saveData, loadData, STORAGE_KEYS } from "@/lib/storage";
 
 export type BookingType = "individual" | "group" | "split";
 export type BookingStatus = "upcoming" | "completed";
 
 export type Booking = {
   id: string;
+  trainerId: number;
   trainerName: string;
   gymName: string;
   date: string;
   time: string;
   type: BookingType;
   status: BookingStatus;
+  tipped?: boolean;
 };
 
 export const BOOKING_TYPE_LABEL: Record<BookingType, string> = {
@@ -21,11 +26,12 @@ export const BOOKING_TYPE_LABEL: Record<BookingType, string> = {
   split: "СПЛИТ",
 };
 
-const STORAGE_KEY = "wp.bookings.v1";
+const STORAGE_KEY = STORAGE_KEYS.bookings;
 
 const SEED_HISTORY: Booking[] = [
   {
     id: "seed-1",
+    trainerId: 1,
     trainerName: "Иван Дроздов",
     gymName: "Tiger Gym",
     date: "12 июн",
@@ -35,6 +41,7 @@ const SEED_HISTORY: Booking[] = [
   },
   {
     id: "seed-2",
+    trainerId: 3,
     trainerName: "Мария Grapple",
     gymName: "Sparta Gym",
     date: "5 июн",
@@ -49,28 +56,76 @@ type Listener = (bookings: Booking[]) => void;
 let bookings: Booking[] | null = null;
 const listeners = new Set<Listener>();
 
+function resolveTrainerId(trainerName: string): number {
+  return trainers.find((t) => t.name === trainerName)?.id ?? 0;
+}
+
+function isBookingType(v: unknown): v is BookingType {
+  return v === "individual" || v === "group" || v === "split";
+}
+
+function isBookingStatus(v: unknown): v is BookingStatus {
+  return v === "upcoming" || v === "completed";
+}
+
+function isValidBooking(raw: unknown): raw is Booking {
+  if (!raw || typeof raw !== "object") return false;
+  const b = raw as Record<string, unknown>;
+  return (
+    typeof b.id === "string" &&
+    typeof b.trainerName === "string" &&
+    typeof b.gymName === "string" &&
+    typeof b.date === "string" &&
+    typeof b.time === "string" &&
+    isBookingType(b.type) &&
+    isBookingStatus(b.status)
+  );
+}
+
+function normalizeBooking(raw: Booking): Booking {
+  const trainerId =
+    typeof raw.trainerId === "number" && raw.trainerId > 0
+      ? raw.trainerId
+      : resolveTrainerId(raw.trainerName);
+  return { ...raw, trainerId };
+}
+
 function load(): Booking[] {
-  if (typeof window === "undefined") return [...SEED_HISTORY];
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [...SEED_HISTORY];
-    const parsed = JSON.parse(raw) as Booking[];
-    return Array.isArray(parsed) ? parsed : [...SEED_HISTORY];
-  } catch {
+    const parsed = loadData<unknown>(STORAGE_KEY, null);
+    if (!parsed || !Array.isArray(parsed)) return [...SEED_HISTORY];
+
+    const normalized = parsed
+      .filter(isValidBooking)
+      .map((b) => normalizeBooking(b));
+
+    if (normalized.length === 0) return [...SEED_HISTORY];
+
+    const hadInvalid = parsed.length !== normalized.length;
+    const hadMissingIds = parsed.some(
+      (item) => isValidBooking(item) && !(item as Booking).trainerId,
+    );
+    if (hadInvalid || hadMissingIds) saveData(STORAGE_KEY, normalized);
+
+    return normalized;
+  } catch (err) {
+    if (process.env.NODE_ENV === "development") {
+      console.warn("[bookings] load failed:", err);
+    }
     return [...SEED_HISTORY];
   }
 }
 
 function persist(next: Booking[]) {
-  bookings = next;
-  if (typeof window !== "undefined") {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      // ignore quota / serialization errors in mock
+  try {
+    bookings = next;
+    saveData(STORAGE_KEY, next);
+    listeners.forEach((l) => l(next));
+  } catch (err) {
+    if (process.env.NODE_ENV === "development") {
+      console.warn("[bookings] persist failed:", err);
     }
   }
-  listeners.forEach((l) => l(next));
 }
 
 export function getBookings(): Booking[] {
@@ -78,21 +133,58 @@ export function getBookings(): Booking[] {
   return bookings;
 }
 
-export function addBooking(input: Omit<Booking, "id" | "status">): Booking {
+export function hasUpcomingBookingForTrainer(trainerId: number): boolean {
+  return getBookings().some(
+    (b) => b.status === "upcoming" && b.trainerId === trainerId,
+  );
+}
+
+export function markTipped(bookingId: string): void {
+  try {
+    const next = getBookings().map((b) =>
+      b.id === bookingId ? { ...b, tipped: true } : b,
+    );
+    persist(next);
+  } catch (err) {
+    if (process.env.NODE_ENV === "development") {
+      console.warn("[bookings] markTipped failed:", err);
+    }
+  }
+}
+
+export type AddBookingInput = Omit<Booking, "id" | "status">;
+
+export function addBooking(input: AddBookingInput): Booking {
   const booking: Booking = {
     ...input,
+    trainerId: input.trainerId || resolveTrainerId(input.trainerName),
     id: `bk-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     status: "upcoming",
   };
-  persist([booking, ...getBookings()]);
+
+  try {
+    persist([booking, ...getBookings()]);
+  } catch (err) {
+    if (process.env.NODE_ENV === "development") {
+      console.warn("[bookings] addBooking failed:", err);
+    }
+    throw err;
+  }
+
   return booking;
 }
 
 export function useBookings(): Booking[] {
-  const [state, setState] = useState<Booking[]>(() => getBookings());
+  const [state, setState] = useState<Booking[]>(() =>
+    clientInitial(() => getBookings(), []),
+  );
 
   useEffect(() => {
-    setState(getBookings());
+    try {
+      setState(getBookings());
+    } catch {
+      setState([]);
+    }
     const listener: Listener = (next) => setState(next);
     listeners.add(listener);
     return () => {

@@ -36,7 +36,7 @@ function AuthCardContent() {
         <Footer />
       </AuthCard>
 
-      <DemoButton />
+      {process.env.NODE_ENV === "development" ? <DemoButton /> : null}
     </>
   );
 }

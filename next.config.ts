@@ -1,11 +1,15 @@
 import type { NextConfig } from "next";
+import path from "node:path";
+
+const projectRoot = path.resolve(process.cwd());
 
 const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  eslint: {
-    ignoreDuringBuilds: true,
+  // Fix Turbopack picking wrong workspace root (parent lockfile)
+  turbopack: {
+    root: projectRoot,
   },
 };
 

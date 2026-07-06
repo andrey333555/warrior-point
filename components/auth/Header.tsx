@@ -1,7 +1,7 @@
 "use client";
 
-import { AUTH_GOLD } from "@/components/auth/types";
 import { useAuthForm } from "@/components/auth/context";
+import { WarriorLogo } from "@/components/warrior-logo";
 
 export function Header() {
   const { mode } = useAuthForm();
@@ -9,7 +9,7 @@ export function Header() {
   return (
     <div className="mb-8 text-center">
       <div className="mb-6 flex items-center justify-center gap-2">
-        <WarriorHexLogo />
+        <WarriorLogo size="sm" />
         <span className="text-lg font-medium tracking-widest text-white">
           WARRIOR POINT
         </span>
@@ -23,25 +23,5 @@ export function Header() {
           : "Регистрация бойца · глобальный паспорт"}
       </p>
     </div>
-  );
-}
-
-function WarriorHexLogo() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden>
-      <polygon
-        points="14,2 26,8 26,20 14,26 2,20 2,8"
-        stroke={AUTH_GOLD}
-        strokeWidth="1.5"
-        fill="none"
-      />
-      <polygon
-        points="14,7 21,11 21,17 14,21 7,17 7,11"
-        stroke={AUTH_GOLD}
-        strokeWidth="1"
-        fill="none"
-        opacity="0.5"
-      />
-    </svg>
   );
 }

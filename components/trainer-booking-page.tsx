@@ -1,10 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { getGymsForTrainer, type Gym, type Trainer } from "@/lib/network";
 import { addBooking } from "@/lib/bookings";
+import { awardTrainingXp, getXp, levelFromXp } from "@/lib/xp";
+import { Button } from "@/components/ui/button";
+import { ErrorMessage } from "@/components/ui/error-message";
 
 type TrainerBookingPageProps = {
   trainer: Trainer;
@@ -51,6 +54,8 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
   const [trainingType, setTrainingType] = useState<TrainingTypeId>("split");
   const [screen, setScreen] = useState<Screen>("booking");
   const [paying, setPaying] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [xpGained, setXpGained] = useState<{ amount: number; newLevel?: number } | null>(null);
 
   const canProceed = !!selectedGym && !!selectedDate && !!selectedTime;
 
@@ -60,27 +65,54 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
   const handlePay = async () => {
     if (paying || !selectedGym || !selectedTime) return;
     setPaying(true);
-    await new Promise((r) => setTimeout(r, 1500));
+    setPaymentError(null);
 
-    addBooking({
-      trainerName: trainer.name,
-      gymName: selectedGym.name,
-      date: dateLabel,
-      time: selectedTime,
-      type: trainingType,
-    });
+    try {
+      await new Promise((r) => setTimeout(r, 1500));
 
-    setPaying(false);
-    setScreen("confirmed");
+      addBooking({
+        trainerId: trainer.id,
+        trainerName: trainer.name,
+        gymName: selectedGym.name,
+        date: dateLabel,
+        time: selectedTime,
+        type: trainingType,
+      });
 
-    const gym = selectedGym;
-    const time = selectedTime;
-    setTimeout(() => {
-      // eslint-disable-next-line no-alert
-      alert(
-        `🔔 Тренировка скоро!\n\n${trainer.name}\n${time} · ${gym.name}\n\nОстался 1 час — удачи!`,
-      );
-    }, 5000);
+      try {
+        const { total: xpBefore } = { total: getXp().total };
+        const xpState = awardTrainingXp(`${typeData.label} · ${trainer.name}`);
+        const gained = xpState.total - xpBefore;
+        const levelBefore = levelFromXp(xpBefore);
+        const levelAfter = levelFromXp(xpState.total);
+        setXpGained({
+          amount: gained,
+          newLevel: levelAfter > levelBefore ? levelAfter : undefined,
+        });
+      } catch (xpErr) {
+        if (process.env.NODE_ENV === "development") {
+          console.warn("[booking] XP award failed:", xpErr);
+        }
+      }
+
+      setScreen("confirmed");
+
+      const gym = selectedGym;
+      const time = selectedTime;
+      setTimeout(() => {
+        // eslint-disable-next-line no-alert
+        alert(
+          `🔔 Тренировка скоро!\n\n${trainer.name}\n${time} · ${gym.name}\n\nОстался 1 час — удачи!`,
+        );
+      }, 5000);
+    } catch (err) {
+      setPaymentError("Не удалось сохранить запись. Попробуй ещё раз.");
+      if (process.env.NODE_ENV === "development") {
+        console.warn("[booking] payment failed:", err);
+      }
+    } finally {
+      setPaying(false);
+    }
   };
 
   // ── Confirmed ──────────────────────────────────────────────────────────────
@@ -136,14 +168,45 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
           <p className="text-sm text-gray-400">Напомним за час до тренировки</p>
         </motion.div>
 
-        <div className="mt-auto pt-8">
-          <button
-            type="button"
+        {xpGained ? (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+            className="mt-3 flex items-center gap-3 rounded-2xl border border-yellow-400/25 bg-yellow-400/[0.06] px-4 py-3"
+          >
+            <span className="text-lg">⚡</span>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-yellow-400">
+                +{xpGained.amount} XP
+              </p>
+              {xpGained.newLevel ? (
+                <p className="text-xs text-yellow-400/70">
+                  🎉 Level up! Ты теперь Level {xpGained.newLevel}
+                </p>
+              ) : (
+                <p className="text-xs text-gray-500">Начислено за тренировку</p>
+              )}
+            </div>
+          </motion.div>
+        ) : null}
+
+        <div className="mt-auto space-y-3 pt-8">
+          <Button
+            fullWidth
+            size="lg"
+            onClick={() => router.push(`/chat/${trainer.id}`)}
+          >
+            Написать тренеру
+          </Button>
+          <Button
+            fullWidth
+            size="lg"
+            variant="secondary"
             onClick={() => router.push("/profile")}
-            className="w-full rounded-xl bg-yellow-400 py-4 text-base font-semibold text-black"
           >
             В паспорт
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -196,37 +259,19 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
           </p>
         </motion.div>
 
-        <div className="mt-auto pt-8">
-          <button
-            type="button"
+        <div className="mt-auto space-y-3 pt-8">
+          {paymentError ? (
+            <ErrorMessage message={paymentError} onRetry={() => setPaymentError(null)} />
+          ) : null}
+          <Button
+            fullWidth
+            size="lg"
+            loading={paying}
             disabled={paying}
             onClick={handlePay}
-            className="relative w-full overflow-hidden rounded-xl bg-yellow-400 py-4 text-base font-semibold text-black disabled:opacity-70"
           >
-            <AnimatePresence mode="wait">
-              {paying ? (
-                <motion.span
-                  key="loading"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="flex items-center justify-center gap-2"
-                >
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/30 border-t-black" />
-                  Обработка…
-                </motion.span>
-              ) : (
-                <motion.span
-                  key="pay"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                >
-                  Оплатить {typeData.price.toLocaleString("ru-RU")}₽
-                </motion.span>
-              )}
-            </AnimatePresence>
-          </button>
+            Оплатить {typeData.price.toLocaleString("ru-RU")}₽
+          </Button>
         </div>
       </div>
     );
@@ -234,7 +279,7 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
 
   // ── Booking form ───────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-black pb-28 text-white">
+    <div className="mx-auto min-h-[100dvh] max-w-lg bg-black pb-[calc(5.5rem+env(safe-area-inset-bottom))] text-white">
       <header className="px-4 py-3">
         <button
           type="button"
@@ -352,16 +397,16 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 border-t border-white/[0.06] bg-black/95 p-4 backdrop-blur-md">
-        <button
-          type="button"
+        <Button
+          fullWidth
+          size="lg"
           disabled={!canProceed}
           onClick={() => setScreen("payment")}
-          className="w-full rounded-xl bg-yellow-400 py-4 text-base font-semibold text-black disabled:opacity-40"
         >
           {canProceed
             ? `Перейти к оплате · ${typeData.price.toLocaleString("ru-RU")}₽`
             : "Выберите дату и время"}
-        </button>
+        </Button>
       </div>
     </div>
   );

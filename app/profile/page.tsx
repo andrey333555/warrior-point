@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import MyTrainings from "@/components/my-trainings";
+import ProfilePage from "@/components/profile-page";
 
 export const metadata: Metadata = {
-  title: "Мои тренировки · Warrior Point",
-  description: "Ближайшие тренировки и история записей",
+  title: "Профиль · Warrior Point",
+  description: "Прогресс, тренировки, тренеры и достижения",
 };
 
-export default function ProfilePage() {
-  return <MyTrainings />;
+export default function ProfileRoutePage() {
+  return <ProfilePage />;
 }

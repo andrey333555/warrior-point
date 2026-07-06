@@ -23,6 +23,28 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ── Warrior Point design tokens ── */
+:root {
+  --wp-radius: 0.75rem;
+  --wp-gap-section: 1.5rem;
+  --wp-gap-card: 0.75rem;
+  --wp-btn-height: 3rem;
+}
+
+/* Consistent vertical rhythm between screen sections */
+.wp-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wp-gap-section);
+}
+
+/* Consistent gap between cards in a list */
+.wp-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wp-gap-card);
+}
+
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }

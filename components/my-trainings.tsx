@@ -1,12 +1,20 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import {
   BOOKING_TYPE_LABEL,
   useBookings,
   type Booking,
 } from "@/lib/bookings";
+import { ReviewModal } from "@/components/trainer-page";
+import { TipModal } from "@/components/tip-modal";
+import { findTrainer } from "@/lib/network";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+
+// ── Type badge ────────────────────────────────────────────────────────────────
 
 function TypeBadge({ type }: { type: Booking["type"] }) {
   const accent =
@@ -23,7 +31,21 @@ function TypeBadge({ type }: { type: Booking["type"] }) {
   );
 }
 
-function BookingCard({ booking, index }: { booking: Booking; index: number }) {
+// ── Booking card ──────────────────────────────────────────────────────────────
+
+function BookingCard({
+  booking,
+  index,
+  onReview,
+  onTip,
+}: {
+  booking: Booking;
+  index: number;
+  onReview?: (booking: Booking) => void;
+  onTip?: (booking: Booking) => void;
+}) {
+  const isCompleted = booking.status === "completed";
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -45,79 +67,146 @@ function BookingCard({ booking, index }: { booking: Booking; index: number }) {
         <span>{booking.time}</span>
       </div>
 
-      <button
-        type="button"
-        className="mt-3 w-full rounded-xl bg-zinc-800 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
-      >
-        Открыть
-      </button>
+      {isCompleted ? (
+        <div className="mt-3 flex gap-2">
+          {onReview ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              fullWidth
+              className="flex-1"
+              onClick={() => onReview(booking)}
+            >
+              ⭐ Отзыв
+            </Button>
+          ) : null}
+          {onTip ? (
+            booking.tipped ? (
+              <div className="flex flex-1 items-center justify-center rounded-xl border border-yellow-400/20 bg-yellow-400/5 py-2.5 text-sm text-yellow-400/60">
+                💛 Отправлено
+              </div>
+            ) : (
+              <Button
+                variant="accent"
+                size="sm"
+                fullWidth
+                className="flex-1"
+                onClick={() => onTip(booking)}
+              >
+                💛 Чаевые
+              </Button>
+            )
+          ) : null}
+        </div>
+      ) : (
+        <Button variant="secondary" size="sm" fullWidth className="mt-3">
+          Открыть
+        </Button>
+      )}
     </motion.div>
   );
 }
 
+// ── Main screen ───────────────────────────────────────────────────────────────
+
 export default function MyTrainings() {
   const router = useRouter();
   const bookings = useBookings();
+  const [reviewing, setReviewing] = useState<Booking | null>(null);
+  const [tipping, setTipping] = useState<Booking | null>(null);
 
   const upcoming = bookings.filter((b) => b.status === "upcoming");
   const history = bookings.filter((b) => b.status === "completed");
 
+  const resolveTrainerId = (booking: Booking): number => {
+    if (booking.trainerId > 0) return booking.trainerId;
+    const found = [1, 2, 3, 4, 5, 6, 7]
+      .map((id) => findTrainer(id))
+      .find((t) => t?.name === booking.trainerName);
+    return found?.id ?? 1;
+  };
+
   return (
-    <div className="min-h-screen bg-black pb-24 text-white">
-      <header className="flex items-center justify-between px-4 py-4">
-        <button
-          type="button"
-          onClick={() => router.push("/")}
-          className="rounded-full border border-white/10 bg-black/50 px-2.5 py-1 text-[9px] uppercase tracking-[0.16em] text-neutral-400"
-        >
-          ← OS
-        </button>
-      </header>
+    <>
+      <div className="min-h-screen bg-black pb-24 text-white">
+        <header className="flex items-center justify-between px-4 py-4">
+          <button
+            type="button"
+            onClick={() => router.push("/")}
+            className="rounded-full border border-white/10 bg-black/50 px-2.5 py-1 text-[9px] uppercase tracking-[0.16em] text-neutral-400"
+          >
+            ←
+          </button>
+        </header>
 
-      <div className="px-4">
-        <motion.h1
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-2xl font-bold"
-        >
-          Мои тренировки
-        </motion.h1>
+        <div className="px-4">
+          <motion.h1
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-2xl font-bold"
+          >
+            Мои тренировки
+          </motion.h1>
 
-        <section className="mt-7">
-          <p className="mb-3 text-sm font-medium text-gray-300">🔥 Ближайшие тренировки</p>
+          <section className="mt-7">
+            <p className="mb-3 text-sm font-medium text-gray-300">🔥 Ближайшие тренировки</p>
           {upcoming.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-zinc-800 p-6 text-center">
-              <p className="text-sm text-gray-500">Пока нет записей</p>
-              <button
-                type="button"
-                onClick={() => router.push("/trainer/1")}
-                className="mt-3 rounded-xl bg-yellow-400 px-4 py-2 text-sm font-semibold text-black"
-              >
-                Записаться
-              </button>
-            </div>
+            <EmptyState
+              icon="🥊"
+              title="У тебя пока нет тренировок"
+              description="Запишись к тренеру или пройди AI-подбор"
+              actionLabel="Найти тренера"
+              actionHref="/ai-match"
+            />
           ) : (
-            <div className="space-y-3">
-              {upcoming.map((b, i) => (
-                <BookingCard key={b.id} booking={b} index={i} />
-              ))}
-            </div>
-          )}
-        </section>
+              <div className="wp-stack">
+                {upcoming.map((b, i) => (
+                  <BookingCard key={b.id} booking={b} index={i} />
+                ))}
+              </div>
+            )}
+          </section>
 
-        <section className="mt-8">
-          <p className="mb-3 text-sm font-medium text-gray-300">📜 История</p>
-          {history.length === 0 ? (
-            <p className="text-sm text-gray-600">История пуста</p>
-          ) : (
-            <div className="space-y-3 opacity-70">
-              {history.map((b, i) => (
-                <BookingCard key={b.id} booking={b} index={i} />
-              ))}
-            </div>
-          )}
-        </section>
+          <section className="mt-8">
+            <p className="mb-3 text-sm font-medium text-gray-300">📜 История</p>
+            {history.length === 0 ? (
+              <p className="text-sm text-gray-600">История пуста</p>
+            ) : (
+              <div className="space-y-3 opacity-90">
+                {history.map((b, i) => (
+                  <BookingCard
+                    key={b.id}
+                    booking={b}
+                    index={i}
+                    onReview={setReviewing}
+                    onTip={setTipping}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
       </div>
-    </div>
+
+      <AnimatePresence>
+        {reviewing ? (
+          <ReviewModal
+            trainerId={resolveTrainerId(reviewing)}
+            trainerName={reviewing.trainerName}
+            onClose={() => setReviewing(null)}
+          />
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {tipping ? (
+          <TipModal
+            bookingId={tipping.id}
+            trainerName={tipping.trainerName}
+            onClose={() => setTipping(null)}
+          />
+        ) : null}
+      </AnimatePresence>
+    </>
   );
 }

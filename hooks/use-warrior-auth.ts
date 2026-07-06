@@ -103,10 +103,16 @@ function oauthSessionToAuthState(oauthSession: NextAuthSession): AuthState {
 
 export function useWarriorAuth(): AuthState {
   const { data: oauthSession, status: oauthStatus } = useSession();
-  const [devBypass, setDevBypass] = useState(isDevBypassActive);
-  const [supabaseAuth, setSupabaseAuth] = useState<SupabaseAuthState>(() =>
-    isDevBypassActive() ? { status: "loading" } : { status: "loading" },
-  );
+  const [hydrated, setHydrated] = useState(false);
+  const [devBypass, setDevBypass] = useState(false);
+  const [supabaseAuth, setSupabaseAuth] = useState<SupabaseAuthState>({
+    status: "loading",
+  });
+
+  useEffect(() => {
+    setDevBypass(isDevBypassActive());
+    setHydrated(true);
+  }, []);
 
   useEffect(() => {
     function onBypassOn() {
@@ -175,6 +181,10 @@ export function useWarriorAuth(): AuthState {
       window.removeEventListener("wp:dev-bypass-off", onBypassOff);
     };
   }, [devBypass]);
+
+  if (!hydrated) {
+    return { status: "loading" };
+  }
 
   if (devBypass) {
     const user = makeDemoUser();

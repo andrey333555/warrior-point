@@ -38,6 +38,14 @@ export default function VIPPage() {
 
   const plan = PLANS.find((p) => p.id === selected)!;
 
+  const handleBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push("/");
+    }
+  };
+
   if (success) {
     return (
       <div
@@ -97,8 +105,9 @@ export default function VIPPage() {
       >
         <button
           type="button"
-          onClick={() => router.back()}
-          className="absolute left-4 top-12 text-white/40 transition-colors hover:text-white"
+          onClick={handleBack}
+          aria-label="Назад"
+          className="absolute left-4 top-12 z-20 flex h-10 w-10 items-center justify-center rounded-full text-white/40 transition-colors hover:bg-white/10 hover:text-white"
         >
           <svg
             width="20"
@@ -125,7 +134,7 @@ export default function VIPPage() {
           }}
         />
 
-        <div className="relative">
+        <div className="relative z-10">
           <div className="mb-3 text-4xl">⚡</div>
           <h1 className="mb-2 text-2xl font-semibold text-white">Round 23 VIP</h1>
           <p className="text-sm leading-relaxed text-white/50">

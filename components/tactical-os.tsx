@@ -15,6 +15,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useWarriorAuth } from "@/hooks/use-warrior-auth";
 import { createWarriorBrowserClient } from "@/lib/supabase/client";
 import { fetchFighterHydration, fetchWarriorProfile } from "@/lib/supabase/read";
 import {
@@ -26,6 +27,7 @@ import {
 import {
   DEMO_FIGHTER_DB_ID,
   DEMO_FIGHTER_DISPLAY_NAME,
+  DEMO_FIGHTER_PORTRAIT,
 } from "@/lib/warrior-constants";
 import {
   PassportView,
@@ -57,6 +59,10 @@ function combatScore(level: number, elo: number): number {
 // ── Shell ─────────────────────────────────────────────────────────────────
 
 export function TacticalOS({ fighterId }: { fighterId: string }) {
+  const auth = useWarriorAuth();
+  const viewerId =
+    auth.status === "authenticated" ? auth.user.id : undefined;
+
   const [category, setCategory] = useState<FeedCategory>("feed");
   const [role, setRole] = useState<Role>("fighter");
   const [searchQuery, setSearchQuery] = useState("");
@@ -116,6 +122,11 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
     window.setTimeout(() => setEcho(null), 2800);
   }, []);
 
+  const onDonateSuccess = useCallback((message: string) => {
+    setEcho(message);
+    window.setTimeout(() => setEcho(null), 3200);
+  }, []);
+
   useEffect(() => {
     if (category !== "feed") {
       setActiveVideo(null);
@@ -163,6 +174,7 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
       role === "fighter" && isDemo
         ? "Cobra — агрессивный striker с высоким finishing rate..."
         : undefined,
+    portraitSrc: isDemo ? DEMO_FIGHTER_PORTRAIT : undefined,
   };
 
   // ── Economy / membership data (training_sessions · fighter_stats) ─────────
@@ -239,10 +251,10 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
           <nav className="relative z-20 flex shrink-0 justify-center px-4 pb-[calc(0.6rem+env(safe-area-inset-bottom,0px))] pt-1.5">
             <Link
               href="/map"
-              className="rounded-full border border-white/[0.08] bg-black/70 px-5 py-2 font-[family-name:var(--font-geist-mono)] text-[10px] font-semibold uppercase tracking-[0.26em] text-zinc-500 backdrop-blur-xl transition-colors hover:border-cyan-400/40 hover:text-cyan-300"
-              style={{ boxShadow: "0 0 40px -12px rgba(0,240,255,0.5)" }}
+              className="rounded-full border border-emerald-900/80 bg-emerald-950/90 px-5 py-2 font-[family-name:var(--font-geist-mono)] text-[10px] font-semibold uppercase tracking-[0.26em] text-emerald-400 backdrop-blur-xl transition-colors hover:border-emerald-700/70 hover:bg-emerald-900/80 hover:text-emerald-300"
+              style={{ boxShadow: "0 0 40px -12px rgba(6,78,59,0.65)" }}
             >
-              Map
+              Карты
             </Link>
           </nav>
         }
@@ -264,10 +276,12 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
                 stats={stats}
                 econ={econ}
                 fighterId={fighterId}
+                viewerId={viewerId}
                 totalXp={totalXp}
                 onCreateSplit={onCreateSplit}
                 onPlayVideo={setActiveVideo}
                 onApplyTraining={onApplyTraining}
+                onDonateSuccess={onDonateSuccess}
               />
             ) : (
               <Leaderboard />

@@ -1,5 +1,13 @@
 // ── Warrior Point network: Gym ↔ Trainer ↔ Fighter ───────────────────────────
 
+export type Review = {
+  id: string;
+  userName: string;
+  text: string;
+  rating: number;
+  date: string;
+};
+
 export type TrainingType = {
   id: string;
   name: string;
@@ -37,6 +45,15 @@ export type Trainer = {
   gymLabels?: Record<number, string>;
   fighters: number[];
   trainings: TrainingType[];
+  rating: number;
+  reviewsCount: number;
+  reviews: Review[];
+  supportCount: number;
+  supportAmount: number;
+  subscriptionEnabled?: boolean;
+  subscriptionPrice?: number;
+  subscriptionSlots?: number;
+  currentSubscribers?: number;
 };
 
 export type Fighter = {
@@ -144,6 +161,19 @@ export const trainers: Trainer[] = [
     gymLabels: { 1: "Флагман", 2: "Филиал" },
     fighters: [1, 2, 3],
     trainings: STRIKING_SPLITS,
+    rating: 4.8,
+    reviewsCount: 120,
+    reviews: [
+      { id: "r1-1", userName: "WP.INTL.X9", text: "Поставил удар за 6 недель. Метод работает.", rating: 5, date: "15 июн" },
+      { id: "r1-2", userName: "NOVA.KICK", text: "Жёсткий, требовательный. Результат есть.", rating: 5, date: "2 июн" },
+      { id: "r1-3", userName: "IRON.FIST", text: "Хорошая база. Хотелось бы больше спаррингов.", rating: 4, date: "20 май" },
+    ],
+    supportCount: 128,
+    supportAmount: 38400,
+    subscriptionEnabled: true,
+    subscriptionPrice: 7990,
+    subscriptionSlots: 20,
+    currentSubscribers: 15,
   },
   {
     id: 2,
@@ -158,6 +188,18 @@ export const trainers: Trainer[] = [
       { id: "t1", name: "Ударка", duration: "60 мин", price: 1800 },
       { id: "t2", name: "Персональная", duration: "60 мин", price: 3200 },
     ],
+    rating: 4.6,
+    reviewsCount: 74,
+    reviews: [
+      { id: "r2-1", userName: "SHADOW.BOX", text: "Скорость выросла заметно за месяц.", rating: 5, date: "10 июн" },
+      { id: "r2-2", userName: "BJJ.WOLF", text: "Хорошие комбо, грамотный разбор.", rating: 4, date: "1 июн" },
+    ],
+    supportCount: 54,
+    supportAmount: 16200,
+    subscriptionEnabled: true,
+    subscriptionPrice: 5990,
+    subscriptionSlots: 15,
+    currentSubscribers: 11,
   },
   {
     id: 3,
@@ -172,6 +214,18 @@ export const trainers: Trainer[] = [
       { id: "t1", name: "Борьба", duration: "60 мин", price: 1600 },
       { id: "t2", name: "BJJ", duration: "90 мин", price: 2000 },
     ],
+    rating: 4.9,
+    reviewsCount: 95,
+    reviews: [
+      { id: "r3-1", userName: "GRAPPLER.PRO", text: "Лучший тренер по борьбе из тех, кого пробовал.", rating: 5, date: "18 июн" },
+      { id: "r3-2", userName: "MAT.KING", text: "Разобрала все мои слабые места. Прогресс реальный.", rating: 5, date: "7 июн" },
+    ],
+    supportCount: 91,
+    supportAmount: 27300,
+    subscriptionEnabled: true,
+    subscriptionPrice: 6990,
+    subscriptionSlots: 12,
+    currentSubscribers: 10,
   },
   {
     id: 4,
@@ -183,6 +237,14 @@ export const trainers: Trainer[] = [
     gyms: [3],
     fighters: [8, 9],
     trainings: STRIKING_SPLITS,
+    rating: 4.7,
+    reviewsCount: 210,
+    reviews: [
+      { id: "r4-1", userName: "BJJ.WOLF", text: "Game plan на бой расписал детально. Редкий тренер.", rating: 5, date: "12 июн" },
+      { id: "r4-2", userName: "TAKEDOWN.99", text: "Много опыта, умеет передать.", rating: 4, date: "3 июн" },
+    ],
+    supportCount: 203,
+    supportAmount: 60900,
   },
   {
     id: 5,
@@ -197,6 +259,13 @@ export const trainers: Trainer[] = [
       { id: "t1", name: "MMA", duration: "90 мин", price: 2500 },
       { id: "t2", name: "Sparring", duration: "60 мин", price: 2200 },
     ],
+    rating: 4.7,
+    reviewsCount: 88,
+    reviews: [
+      { id: "r5-1", userName: "CHAMP.X", text: "Подготовил к бою за 8 недель. Уровень профи.", rating: 5, date: "14 июн" },
+    ],
+    supportCount: 67,
+    supportAmount: 20100,
   },
   {
     id: 6,
@@ -211,6 +280,14 @@ export const trainers: Trainer[] = [
       { id: "t1", name: "Функционал", duration: "60 мин", price: 1400 },
       { id: "t2", name: "Сила", duration: "60 мин", price: 1600 },
     ],
+    rating: 4.5,
+    reviewsCount: 52,
+    reviews: [
+      { id: "r6-1", userName: "FORGE.HEAVY", text: "Кондиция выросла за 2 месяца. Метод рабочий.", rating: 5, date: "9 июн" },
+      { id: "r6-2", userName: "KAZAR.L", text: "Хорошо, но иногда перегружает объёмом.", rating: 4, date: "25 май" },
+    ],
+    supportCount: 38,
+    supportAmount: 11400,
   },
   {
     id: 7,
@@ -225,6 +302,18 @@ export const trainers: Trainer[] = [
       { id: "t1", name: "Ударка", duration: "60 мин", price: 3000 },
       { id: "t2", name: "VIP сплит", duration: "90 мин", price: 5000 },
     ],
+    rating: 5.0,
+    reviewsCount: 47,
+    reviews: [
+      { id: "r7-1", userName: "ROUND.23", text: "Лучший коуч в сети. Другой уровень.", rating: 5, date: "20 июн" },
+      { id: "r7-2", userName: "ELENA.S", text: "Footwork полностью переработала. Топ.", rating: 5, date: "11 июн" },
+    ],
+    supportCount: 312,
+    supportAmount: 93600,
+    subscriptionEnabled: true,
+    subscriptionPrice: 12990,
+    subscriptionSlots: 10,
+    currentSubscribers: 9,
   },
 ];
 

@@ -27,3 +27,7 @@ export const DEMO_FIGHTER_COACH = "Олег Владимирович";
 
 /** Demo combat score showcase value. */
 export const DEMO_COMBAT_SCORE = 92.4 as const;
+
+/** Portrait for demo fighter passport (hero + avatar). */
+export const DEMO_FIGHTER_PORTRAIT =
+  "https://images.unsplash.com/photo-1552072805-f9a7be36c5c9?w=1200&q=85&auto=format&fit=crop&crop=faces";

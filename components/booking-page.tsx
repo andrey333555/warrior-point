@@ -9,6 +9,7 @@ import {
   trainers,
   type TrainingType,
 } from "@/lib/data";
+import { Button } from "@/components/ui/button";
 
 function FlowArrow() {
   return <p className="py-1 text-center text-lg text-zinc-700">↓</p>;
@@ -148,13 +149,9 @@ export default function BookingPage() {
         </p>
       </div>
 
-      <button
-        type="button"
-        disabled={!selectedDate || !selectedTime}
-        className="w-full rounded-xl bg-yellow-400 py-3 font-semibold text-black disabled:opacity-40"
-      >
+      <Button fullWidth disabled={!selectedDate || !selectedTime}>
         Подтвердить запись
-      </button>
+      </Button>
     </div>
   );
 }

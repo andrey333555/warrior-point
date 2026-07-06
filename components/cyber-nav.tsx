@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 const LINKS = [
   { href: "/", label: "Passport", match: /^\/$/ },
   { href: "/leaderboard", label: "Leaderboard", match: /^\/leaderboard/ },
-  { href: "/map", label: "Map", match: /^\/map/ },
+  { href: "/map", label: "Карты", match: /^\/map/, variant: "map" as const },
 ];
 
 /**
@@ -29,17 +29,22 @@ export function CyberNav() {
       <div className="flex items-center gap-1">
         {LINKS.map((item) => {
           const active = item.match.test(pathname ?? "");
+          const isMap = item.variant === "map";
+
+          const activeClass = isMap
+            ? "relative rounded-full border border-emerald-800/70 bg-emerald-950/80 px-4 py-1.5 font-[family-name:var(--font-geist-mono)] text-[10.5px] font-semibold uppercase tracking-[0.28em] text-emerald-300 shadow-[0_0_22px_-6px_rgba(6,78,59,0.8)]"
+            : "relative rounded-full border border-cyan-400/55 bg-cyan-500/[0.1] px-4 py-1.5 font-[family-name:var(--font-geist-mono)] text-[10.5px] font-semibold uppercase tracking-[0.28em] text-cyan-200 shadow-[0_0_22px_-6px_rgba(34,211,238,0.7)]";
+
+          const idleClass = isMap
+            ? "rounded-full border border-emerald-950/80 bg-emerald-950/40 px-4 py-1.5 font-[family-name:var(--font-geist-mono)] text-[10.5px] font-semibold uppercase tracking-[0.28em] text-emerald-600 transition-colors hover:border-emerald-800/60 hover:bg-emerald-950/60 hover:text-emerald-400"
+            : "rounded-full border border-transparent bg-transparent px-4 py-1.5 font-[family-name:var(--font-geist-mono)] text-[10.5px] font-semibold uppercase tracking-[0.28em] text-zinc-500 transition-colors hover:border-white/[0.08] hover:text-cyan-300/95";
 
           return (
             <Link
               key={item.href}
               href={item.href}
               aria-current={active ? "page" : undefined}
-              className={
-                active
-                  ? "relative rounded-full border border-cyan-400/55 bg-cyan-500/[0.1] px-4 py-1.5 font-[family-name:var(--font-geist-mono)] text-[10.5px] font-semibold uppercase tracking-[0.28em] text-cyan-200 shadow-[0_0_22px_-6px_rgba(34,211,238,0.7)]"
-                  : "rounded-full border border-transparent bg-transparent px-4 py-1.5 font-[family-name:var(--font-geist-mono)] text-[10.5px] font-semibold uppercase tracking-[0.28em] text-zinc-500 transition-colors hover:border-white/[0.08] hover:text-cyan-300/95"
-              }
+              className={active ? activeClass : idleClass}
             >
               {item.label}
             </Link>
