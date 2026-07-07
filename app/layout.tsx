@@ -6,6 +6,7 @@ import { TelegramTheme } from "@/components/telegram-theme";
 import { PwaInstallBanner } from "@/components/pwa-install-banner";
 import { StoreInit } from "@/components/StoreInit";
 import { Providers } from "./providers";
+import { GuestLinkActivatorRoot } from "@/components/guest-link-activator-root";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -85,7 +86,10 @@ export default function RootLayout({
         <TelegramTheme />
 
         <StoreInit />
-        <Providers>{children}</Providers>
+        <Providers>
+          <GuestLinkActivatorRoot />
+          {children}
+        </Providers>
         <CyberNav />
         <PwaInstallBanner />
       </body>

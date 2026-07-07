@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { donateSettlement } from "@/lib/economy";
+import { isGuestDonorId } from "@/lib/guest-donor";
 
 export type DonationRow = {
   id: string;
@@ -295,6 +296,75 @@ export async function handleDonate(
     ok: true,
     donationId: donationId ?? "",
     newDonorBalance: donorBalance,
+    breakdown,
+  };
+}
+
+/**
+ * SBP guest tip — no platform wallet, no login.
+ * Credits fighter net; donor is an anonymous guest id (Yandex Music model).
+ */
+export async function handleGuestSbpDonate(
+  client: SupabaseClient,
+  opts: {
+    guestDonorId: string;
+    recipientId: string;
+    grossRub: number;
+    comment?: string;
+  },
+): Promise<DonateResult> {
+  const { guestDonorId, recipientId, comment } = opts;
+
+  if (!isGuestDonorId(guestDonorId)) {
+    return { ok: false, code: "DB_ERROR", message: "Некорректный guest donor id" };
+  }
+
+  const breakdown = donateSettlement(opts.grossRub);
+  if (breakdown.gross < 50) {
+    return {
+      ok: false,
+      code: "INVALID_AMOUNT",
+      message: "Минимальная сумма доната — 50 ₽",
+    };
+  }
+
+  const { data: recipientProfile } = await client
+    .from("profiles")
+    .select("balance")
+    .eq("id", recipientId)
+    .maybeSingle();
+
+  let recipientBalance = num(recipientProfile?.balance);
+  recipientBalance += breakdown.net;
+
+  const { error: creditErr } = await resilientUpdate(
+    client,
+    "profiles",
+    { id: recipientId },
+    { balance: recipientBalance },
+  );
+  if (creditErr) {
+    return { ok: false, code: "DB_ERROR", message: creditErr.message };
+  }
+
+  const trimmedComment = comment?.trim().slice(0, 280) || null;
+  const { error: insertErr, id: donationId } = await resilientInsert(client, "donations", {
+    donor_id: guestDonorId,
+    recipient_id: recipientId,
+    gross_amount: breakdown.gross,
+    platform_fee: breakdown.platformFee,
+    net_amount: breakdown.net,
+    comment: trimmedComment,
+  });
+
+  if (insertErr) {
+    return { ok: false, code: "DB_ERROR", message: insertErr.message };
+  }
+
+  return {
+    ok: true,
+    donationId: donationId ?? "",
+    newDonorBalance: 0,
     breakdown,
   };
 }

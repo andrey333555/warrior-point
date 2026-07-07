@@ -30,4 +30,8 @@ export const DEMO_COMBAT_SCORE = 92.4 as const;
 
 /** Portrait for demo fighter passport (hero + avatar). */
 export const DEMO_FIGHTER_PORTRAIT =
-  "https://images.unsplash.com/photo-1552072805-f9a7be36c5c9?w=1200&q=85&auto=format&fit=crop&crop=faces";
+  "https://images.unsplash.com/photo-1599058917765-a780eda07a3e?w=1200&q=85&auto=format&fit=crop&crop=faces";
+
+/** Training video thumbnail on passport (bottom preview). */
+export const DEMO_TRAINING_THUMBNAIL =
+  "https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?w=1200&q=85&auto=format&fit=crop";

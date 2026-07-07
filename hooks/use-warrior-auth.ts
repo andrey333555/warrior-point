@@ -14,6 +14,9 @@ export type AuthState =
       status: "authenticated";
       user: User;
       session: Session;
+      /** Demo / guest passport — no OAuth required. */
+      guestMode?: true;
+      /** @deprecated use guestMode */
       devBypass?: true;
       oauth?: true;
     };
@@ -23,38 +26,53 @@ type SupabaseAuthState =
   | { status: "unauthenticated" }
   | { status: "authenticated"; user: User; session: Session };
 
-// ── Dev bypass ────────────────────────────────────────────────────────────────
+// ── Guest / demo mode (production-safe) ───────────────────────────────────────
 
+export const GUEST_MODE_KEY = "wp_guest_mode";
+/** @deprecated — kept for back-compat with older builds */
 export const DEV_BYPASS_KEY = "wp_dev_bypass";
 
-/** Activate dev bypass: stores flag + triggers storage event for same-tab sync. */
-export function activateDevBypass(): void {
-  try {
-    localStorage.setItem(DEV_BYPASS_KEY, "1");
-    window.dispatchEvent(new CustomEvent("wp:dev-bypass"));
-  } catch {
-    location.reload();
-  }
-}
+const OAUTH_LOADING_CAP_MS = 2800;
 
-/** Deactivate dev bypass and reload. */
-export function deactivateDevBypass(): void {
-  try {
-    localStorage.removeItem(DEV_BYPASS_KEY);
-    window.dispatchEvent(new CustomEvent("wp:dev-bypass-off"));
-  } catch {
-    location.reload();
-  }
-}
-
-export function isDevBypassActive(): boolean {
+export function isGuestModeActive(): boolean {
   if (typeof window === "undefined") return false;
   try {
-    return localStorage.getItem(DEV_BYPASS_KEY) === "1";
+    return (
+      localStorage.getItem(GUEST_MODE_KEY) === "1" ||
+      localStorage.getItem(DEV_BYPASS_KEY) === "1"
+    );
   } catch {
     return false;
   }
 }
+
+/** Enter demo passport without login — works on production. */
+export function activateGuestMode(): void {
+  try {
+    localStorage.setItem(GUEST_MODE_KEY, "1");
+    localStorage.setItem(DEV_BYPASS_KEY, "1");
+    window.dispatchEvent(new CustomEvent("wp:guest-mode"));
+  } catch {
+    location.reload();
+  }
+}
+
+export function deactivateGuestMode(): void {
+  try {
+    localStorage.removeItem(GUEST_MODE_KEY);
+    localStorage.removeItem(DEV_BYPASS_KEY);
+    window.dispatchEvent(new CustomEvent("wp:guest-mode-off"));
+  } catch {
+    location.reload();
+  }
+}
+
+/** @deprecated use activateGuestMode */
+export const activateDevBypass = activateGuestMode;
+/** @deprecated use deactivateGuestMode */
+export const deactivateDevBypass = deactivateGuestMode;
+/** @deprecated use isGuestModeActive */
+export const isDevBypassActive = isGuestModeActive;
 
 function makeDemoUser(): User {
   return {
@@ -99,37 +117,62 @@ function oauthSessionToAuthState(oauthSession: NextAuthSession): AuthState {
   };
 }
 
+function guestAuthState(): AuthState {
+  const user = makeDemoUser();
+  return {
+    status: "authenticated",
+    user,
+    session: makeSyntheticSession(user),
+    guestMode: true,
+    devBypass: true,
+  };
+}
+
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useWarriorAuth(): AuthState {
   const { data: oauthSession, status: oauthStatus } = useSession();
   const [hydrated, setHydrated] = useState(false);
-  const [devBypass, setDevBypass] = useState(false);
+  const [guestMode, setGuestMode] = useState(false);
+  const [oauthTimedOut, setOauthTimedOut] = useState(false);
   const [supabaseAuth, setSupabaseAuth] = useState<SupabaseAuthState>({
     status: "loading",
   });
 
   useEffect(() => {
-    setDevBypass(isDevBypassActive());
+    setGuestMode(isGuestModeActive());
     setHydrated(true);
   }, []);
 
   useEffect(() => {
-    function onBypassOn() {
-      setDevBypass(true);
+    if (oauthStatus !== "loading") {
+      setOauthTimedOut(false);
+      return;
     }
-    function onBypassOff() {
-      setDevBypass(false);
+    const id = window.setTimeout(() => setOauthTimedOut(true), OAUTH_LOADING_CAP_MS);
+    return () => window.clearTimeout(id);
+  }, [oauthStatus]);
+
+  useEffect(() => {
+    function onGuestOn() {
+      setGuestMode(true);
+    }
+    function onGuestOff() {
+      setGuestMode(false);
       setSupabaseAuth({ status: "loading" });
     }
 
-    window.addEventListener("wp:dev-bypass", onBypassOn);
-    window.addEventListener("wp:dev-bypass-off", onBypassOff);
+    window.addEventListener("wp:guest-mode", onGuestOn);
+    window.addEventListener("wp:guest-mode-off", onGuestOff);
+    window.addEventListener("wp:dev-bypass", onGuestOn);
+    window.addEventListener("wp:dev-bypass-off", onGuestOff);
 
-    if (devBypass) {
+    if (guestMode) {
       return () => {
-        window.removeEventListener("wp:dev-bypass", onBypassOn);
-        window.removeEventListener("wp:dev-bypass-off", onBypassOff);
+        window.removeEventListener("wp:guest-mode", onGuestOn);
+        window.removeEventListener("wp:guest-mode-off", onGuestOff);
+        window.removeEventListener("wp:dev-bypass", onGuestOn);
+        window.removeEventListener("wp:dev-bypass-off", onGuestOff);
       };
     }
 
@@ -143,7 +186,7 @@ export function useWarriorAuth(): AuthState {
       }
 
       const { data } = await client.auth.getSession();
-      if (isDevBypassActive()) return;
+      if (isGuestModeActive()) return;
 
       if (data.session?.user) {
         setSupabaseAuth({
@@ -157,7 +200,7 @@ export function useWarriorAuth(): AuthState {
 
       const { data: listener } = client.auth.onAuthStateChange(
         (_event, session) => {
-          if (isDevBypassActive()) return;
+          if (isGuestModeActive()) return;
           if (session?.user) {
             setSupabaseAuth({
               status: "authenticated",
@@ -177,26 +220,25 @@ export function useWarriorAuth(): AuthState {
 
     return () => {
       unsubscribe?.();
-      window.removeEventListener("wp:dev-bypass", onBypassOn);
-      window.removeEventListener("wp:dev-bypass-off", onBypassOff);
+      window.removeEventListener("wp:guest-mode", onGuestOn);
+      window.removeEventListener("wp:guest-mode-off", onGuestOff);
+      window.removeEventListener("wp:dev-bypass", onGuestOn);
+      window.removeEventListener("wp:dev-bypass-off", onGuestOff);
     };
-  }, [devBypass]);
+  }, [guestMode]);
 
   if (!hydrated) {
     return { status: "loading" };
   }
 
-  if (devBypass) {
-    const user = makeDemoUser();
-    return {
-      status: "authenticated",
-      user,
-      session: makeSyntheticSession(user),
-      devBypass: true,
-    };
+  if (guestMode) {
+    return guestAuthState();
   }
 
-  if (oauthStatus === "loading" || supabaseAuth.status === "loading") {
+  const oauthStillLoading = oauthStatus === "loading" && !oauthTimedOut;
+  const supabaseStillLoading = supabaseAuth.status === "loading";
+
+  if (oauthStillLoading || supabaseStillLoading) {
     return { status: "loading" };
   }
 
@@ -208,9 +250,12 @@ export function useWarriorAuth(): AuthState {
 }
 
 export async function signOutWarrior() {
-  deactivateDevBypass();
+  deactivateGuestMode();
   await nextAuthSignOut({ redirect: false });
   const client = createWarriorBrowserClient();
   if (!client) return;
   await client.auth.signOut();
 }
+
+/** Share link for WhatsApp / family — one tap into demo passport. */
+export const GUEST_SHARE_PATH = "/?guest=1";

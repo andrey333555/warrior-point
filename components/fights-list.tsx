@@ -44,13 +44,7 @@ export function FightsList({
   }
 
   return (
-    <motion.ul
-      initial={{ opacity: 0, height: 0 }}
-      animate={{ opacity: 1, height: "auto" }}
-      exit={{ opacity: 0, height: 0 }}
-      transition={{ type: "spring", stiffness: 280, damping: 28 }}
-      className="space-y-1.5 overflow-hidden"
-    >
+    <ul className="space-y-1.5 overflow-hidden">
       {fights.map((f, i) => {
         const st = OUTCOME_STYLE[f.outcome];
         return (
@@ -79,6 +73,6 @@ export function FightsList({
           </motion.li>
         );
       })}
-    </motion.ul>
+    </ul>
   );
 }

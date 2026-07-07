@@ -31,13 +31,20 @@ function findScrollParent(el: HTMLElement | null): HTMLElement | null {
 }
 
 export function PassportHero({
-  imageSrc = "https://images.unsplash.com/photo-1599058917765-a780eda07a3e?w=900&q=80",
+  imageSrc,
   glowColor = "#a855f7",
   heightClass = "h-[200px]",
   parallaxFactor = 0.3,
 }: PassportHeroProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [scrollY, setScrollY] = useState(0);
+  const fallback =
+    "https://images.unsplash.com/photo-1599058917765-a780eda07a3e?w=900&q=80";
+  const [src, setSrc] = useState(imageSrc || fallback);
+
+  useEffect(() => {
+    setSrc(imageSrc || fallback);
+  }, [imageSrc, fallback]);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -60,9 +67,12 @@ export function PassportHero({
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={imageSrc}
+          src={src}
           alt=""
           className="absolute inset-0 h-full w-full object-cover object-top"
+          onError={() => {
+            if (src !== fallback) setSrc(fallback);
+          }}
         />
 
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />

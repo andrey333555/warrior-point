@@ -24,12 +24,13 @@ import { createWarriorBrowserClient } from "@/lib/supabase/client";
 import { syncWithSherdog, type SherdogSyncStatus } from "@/lib/sherdog-sync";
 import {
   fetchFundraiserProgress,
-  handleDonate,
   type FundraiserProgress,
 } from "@/lib/supabase/donations";
-import { donateSettlement } from "@/lib/economy";
+import { submitFighterDonation } from "@/lib/donations-flow";
+import { localFundraiserProgress } from "@/lib/donations-store";
 import { deriveInitials } from "@/lib/supabase/provision-user";
-import { DEMO_FIGHTER_INITIALS } from "@/lib/warrior-constants";
+import { DEMO_FIGHTER_INITIALS, DEMO_FIGHTER_PORTRAIT } from "@/lib/warrior-constants";
+import { DEFAULT_FIGHTER_IMAGE } from "@/lib/network";
 import {
   DonateModal,
   SupportFighterButton,
@@ -60,6 +61,7 @@ export type PassportStats = {
   badges?: string[];
   aiAnalysis?: string;
   portraitSrc?: string;
+  trainingThumbnailSrc?: string;
 };
 
 export type PassportEcon = {
@@ -95,8 +97,46 @@ const fmtRub = new Intl.NumberFormat("ru-RU", {
   maximumFractionDigits: 0,
 });
 
+const PORTRAIT_FALLBACK = DEMO_FIGHTER_PORTRAIT;
+const THUMB_FALLBACK = DEFAULT_FIGHTER_IMAGE;
+
+function SafeImg({
+  src,
+  fallback,
+  alt,
+  className,
+}: {
+  src?: string;
+  fallback: string;
+  alt: string;
+  className?: string;
+}) {
+  const [current, setCurrent] = useState(src || fallback);
+
+  useEffect(() => {
+    setCurrent(src || fallback);
+  }, [src, fallback]);
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={current}
+      alt={alt}
+      className={className}
+      onError={() => {
+        if (current !== fallback) setCurrent(fallback);
+      }}
+    />
+  );
+}
 const EASE = "transition-all duration-300 ease-out";
 const PURPLE_HOVER_SHADOW = "hover:shadow-[0_0_20px_rgba(168,85,247,0.3)]";
+const CONTRACT_PANEL_EASE = [0.4, 0, 0.2, 1] as const;
+const CONTRACT_PANEL_TRANSITION = {
+  height: { duration: 0.38, ease: CONTRACT_PANEL_EASE },
+  opacity: { duration: 0.28, ease: "easeOut" as const },
+  layout: { duration: 0.38, ease: CONTRACT_PANEL_EASE },
+};
 
 function sectionMotion(delay = 0) {
   return {
@@ -266,9 +306,9 @@ function PassportTop({
             className={`relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-black text-sm font-semibold text-white ${EASE}`}
           >
             {portraitSrc ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <SafeImg
                 src={portraitSrc}
+                fallback={PORTRAIT_FALLBACK}
                 alt={name}
                 className="h-full w-full object-cover object-[center_20%]"
               />
@@ -499,12 +539,12 @@ function PersonalTrainingCard({ onApply }: { onApply?: () => void }) {
 function LastFightPreview({
   fight,
   fighterName,
-  portraitSrc,
+  thumbnailSrc,
   onPlay,
 }: {
   fight: LeagueFight;
   fighterName: string;
-  portraitSrc?: string;
+  thumbnailSrc?: string;
   onPlay?: (video: Video) => void;
 }) {
   const handlePlay = () => {
@@ -526,12 +566,9 @@ function LastFightPreview({
         onClick={handlePlay}
         className={`group relative w-full overflow-hidden rounded-xl ${EASE} ${PURPLE_HOVER_SHADOW} hover:scale-[1.01] active:scale-[0.99]`}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={
-            portraitSrc ??
-            "https://images.unsplash.com/photo-1599058917765-a780eda07a3e?w=800&q=80"
-          }
+        <SafeImg
+          src={thumbnailSrc}
+          fallback={THUMB_FALLBACK}
           alt={`Тренировка с ${displayName}`}
           className={`h-[160px] w-full object-cover ${EASE} group-hover:scale-[1.02]`}
         />
@@ -625,7 +662,9 @@ export function PassportView({
     const client = createWarriorBrowserClient();
     if (!client || !fighterId) return;
 
-    void fetchFundraiserProgress(client, fighterId).then(setFundraiser);
+    void fetchFundraiserProgress(client, fighterId).then((remote) => {
+      setFundraiser(localFundraiserProgress(fighterId, remote));
+    });
 
     if (viewerId) {
       void client
@@ -643,62 +682,49 @@ export function PassportView({
 
   const submitDonate: DonatePaymentHandler = useCallback(
     async (amount, comment) => {
-      const client = createWarriorBrowserClient();
-      if (!client || !viewerId || !fighterId) {
-        setDonateError("Войди в аккаунт для доната");
+      if (!fighterId) {
+        setDonateError("Профиль бойца недоступен");
         return null;
       }
       setDonateBusy(true);
       setDonateError(null);
-      const result = await handleDonate(client, {
-        donorId: viewerId,
-        recipientId: fighterId,
-        grossRub: amount,
-        comment,
-      });
+
+      const result = await submitFighterDonation(
+        createWarriorBrowserClient(),
+        {
+          recipientId: fighterId,
+          grossRub: amount,
+          comment,
+          viewerId,
+          fundraiserFallback: fundraiser,
+        },
+      );
+
       setDonateBusy(false);
+
       if (!result.ok) {
-        if (
-          process.env.NODE_ENV === "development" &&
-          (result.code === "SELF_DONATE" || result.code === "DB_ERROR")
-        ) {
-          const breakdown = donateSettlement(amount);
-          setIsDonateModalOpen(false);
-          setFundraiser((prev) => {
-            const raisedRub = prev.raisedRub + breakdown.net;
-            return {
-              ...prev,
-              raisedRub,
-              pct: Math.min(100, Math.round((raisedRub / prev.goalRub) * 100)),
-            };
-          });
-          onDonateSuccess?.(
-            `Донат ${amount.toLocaleString("ru-RU")} ₽ · бойцу +${breakdown.net.toLocaleString("ru-RU")} ₽`,
-          );
-          return {
-            grossRub: amount,
-            netRub: breakdown.net,
-            newDonorBalance: Math.max(0, donorBalance - amount),
-          };
-        }
         setDonateError(result.message);
         return null;
       }
-      setDonorBalance(result.newDonorBalance);
-      setIsDonateModalOpen(false);
-      const progress = await fetchFundraiserProgress(client, fighterId);
-      setFundraiser(progress);
+
+      setFundraiser(result.fundraiser);
+      if (result.source === "wallet") {
+        setDonorBalance(result.newDonorBalance);
+      }
+
       onDonateSuccess?.(
-        `Донат ${amount.toLocaleString("ru-RU")} ₽ · бойцу +${result.breakdown.net.toLocaleString("ru-RU")} ₽`,
+        `Донат ${result.grossRub.toLocaleString("ru-RU")} ₽ · бойцу +${result.netRub.toLocaleString("ru-RU")} ₽`,
       );
+
       return {
-        grossRub: amount,
-        netRub: result.breakdown.net,
+        grossRub: result.grossRub,
+        netRub: result.netRub,
         newDonorBalance: result.newDonorBalance,
         donationId: result.donationId,
+        source: result.source,
       };
     },
-    [fighterId, viewerId, onDonateSuccess, donorBalance],
+    [fighterId, viewerId, onDonateSuccess, fundraiser],
   );
 
   const closeDonateModal = useCallback(() => {
@@ -823,15 +849,16 @@ export function PassportView({
         />
       </motion.div>
 
-      <AnimatePresence>
+      <AnimatePresence initial={false} mode="popLayout">
         {activeLeague ? (
           <motion.div
             key={activeLeague}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            transition={{ duration: 0.4 }}
-            className={`mx-5 overflow-hidden rounded-xl border border-white/[0.08] bg-black/50 px-3 py-2 ${EASE}`}
+            layout
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={CONTRACT_PANEL_TRANSITION}
+            className="mx-5 overflow-hidden rounded-xl border border-white/[0.08] bg-black/50 px-3 py-2"
           >
             <p className="mb-1.5 font-[family-name:var(--font-jetbrains-mono)] text-[8px] font-semibold uppercase tracking-[0.28em] text-neutral-500">
               Fights · {CONTRACTS.find((c) => c.id === activeLeague)?.label ?? activeLeague.toUpperCase()}
@@ -845,17 +872,25 @@ export function PassportView({
       </AnimatePresence>
 
       {role === "fighter" ? (
-        <motion.div {...sectionMotion(0.18)}>
+        <motion.div
+          layout
+          transition={CONTRACT_PANEL_TRANSITION}
+          {...sectionMotion(0.18)}
+        >
           <PersonalTrainingCard onApply={onApplyTraining} />
         </motion.div>
       ) : null}
 
-      {latestFight ? (
-        <motion.div {...sectionMotion(0.2)}>
+      {role === "fighter" && latestFight ? (
+        <motion.div
+          layout
+          transition={CONTRACT_PANEL_TRANSITION}
+          {...sectionMotion(0.2)}
+        >
           <LastFightPreview
             fight={latestFight}
             fighterName={stats.nickname ?? stats.name}
-            portraitSrc={stats.portraitSrc}
+            thumbnailSrc={stats.trainingThumbnailSrc ?? stats.portraitSrc}
             onPlay={onPlayVideo}
           />
         </motion.div>

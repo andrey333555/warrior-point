@@ -73,9 +73,9 @@ import {
 } from "@/components/donate-modal";
 import {
   fetchFundraiserProgress,
-  handleDonate,
   type FundraiserProgress,
 } from "@/lib/supabase/donations";
+import { submitFighterDonation } from "@/lib/donations-flow";
 
 const LEAGUE_CARDS = [
   { id: "aca", Logo: AcaLogo, color: "#facc15", label: "ACA" },
@@ -248,20 +248,15 @@ export function WarriorPassport({ fighterId }: { fighterId: string }) {
       });
   }, [fighterId, remoteBootstrapped, viewerId]);
 
-  const submitDonate: DonatePaymentHandler = useCallback(
-    async (amount, comment) => {
-      const client = createWarriorBrowserClient();
-      if (!client || !viewerId) {
-        setDonateError("Войди в аккаунт для доната");
-        return null;
-      }
+  const submitDonate = useCallback(
+    async (amount: number, comment: string) => {
       setDonateBusy(true);
       setDonateError(null);
-      const result = await handleDonate(client, {
-        donorId: viewerId,
+      const result = await submitFighterDonation(createWarriorBrowserClient(), {
         recipientId: fighterId,
         grossRub: amount,
         comment,
+        viewerId,
       });
       setDonateBusy(false);
       if (!result.ok) {
@@ -269,18 +264,17 @@ export function WarriorPassport({ fighterId }: { fighterId: string }) {
         return null;
       }
       setDonorBalance(result.newDonorBalance);
-      setIsDonateModalOpen(false);
+      setFundraiser(result.fundraiser);
       setLedgerEcho({
         tone: "ok",
-        message: `Донат ${amount.toLocaleString("ru-RU")} ₽ · бойцу +${result.breakdown.net.toLocaleString("ru-RU")} ₽`,
+        message: `Донат ${amount.toLocaleString("ru-RU")} ₽ · бойцу +${result.netRub.toLocaleString("ru-RU")} ₽`,
       });
-      const progress = await fetchFundraiserProgress(client, fighterId);
-      setFundraiser(progress);
       return {
-        grossRub: amount,
-        netRub: result.breakdown.net,
+        grossRub: result.grossRub,
+        netRub: result.netRub,
         newDonorBalance: result.newDonorBalance,
         donationId: result.donationId,
+        source: result.source,
       };
     },
     [fighterId, viewerId],

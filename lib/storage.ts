@@ -47,7 +47,8 @@ export const STORAGE_KEYS = {
   reviews:       "wp.reviews.v1",
   goals:         "wp.goals.v1",
   subscriptions: "wp.subscriptions.v1",
-  chat:          (trainerId: number) => `wp.chat.${trainerId}.v1`,
+  donations:     "wp.donations.v1",
+  guestDonor:    "wp.guest-donor.v1",
 } as const;
 
 // ── Debug util ────────────────────────────────────────────────────────────────

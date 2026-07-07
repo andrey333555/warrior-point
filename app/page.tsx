@@ -1,6 +1,6 @@
 "use client";
 
-import { useWarriorAuth, deactivateDevBypass } from "@/hooks/use-warrior-auth";
+import { useWarriorAuth, deactivateGuestMode } from "@/hooks/use-warrior-auth";
 import { AuthGate } from "@/components/auth-gate";
 import { TacticalOS } from "@/components/tactical-os";
 
@@ -24,21 +24,23 @@ export default function Home() {
     return <AuthGate />;
   }
 
+  const inGuestMode = auth.guestMode ?? auth.devBypass;
+
   return (
     <>
-      {/* Dev-mode indicator — only in development, only when bypass is active */}
-      {process.env.NODE_ENV === "development" && auth.devBypass && (
+      {inGuestMode ? (
         <button
           type="button"
-          onClick={deactivateDevBypass}
-          title="Dev bypass активен · нажми чтобы выйти"
-          className="fixed right-3 top-3 z-[300] flex items-center gap-1.5 rounded-full border border-cyan-400/40 bg-black/80 px-2.5 py-1 font-[family-name:var(--font-geist-mono)] text-[9px] font-semibold uppercase tracking-[0.22em] text-cyan-300 opacity-60 backdrop-blur-md transition-opacity hover:opacity-100"
-          style={{ boxShadow: "0 0 12px -3px rgba(0,240,255,0.5)" }}
+          onClick={deactivateGuestMode}
+          title="Гостевой режим · нажми чтобы выйти"
+          className="fixed right-3 top-3 z-[300] flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-black/80 px-2.5 py-1 font-[family-name:var(--font-geist-mono)] text-[9px] font-semibold uppercase tracking-[0.22em] text-amber-300 opacity-70 backdrop-blur-md transition-opacity hover:opacity-100"
+          style={{ boxShadow: "0 0 12px -3px rgba(251,191,36,0.45)" }}
         >
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" />
-          DEV
+          <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+          Гость
         </button>
-      )}
+      ) : null}
+
       <TacticalOS fighterId={auth.user.id} />
     </>
   );

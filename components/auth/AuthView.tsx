@@ -10,7 +10,7 @@ import { EmailForm } from "@/components/auth/EmailForm";
 import { SubmitButton } from "@/components/auth/SubmitButton";
 import { Footer } from "@/components/auth/Footer";
 import { TelegramButton } from "@/components/auth/TelegramButton";
-import { DemoButton } from "@/components/auth/DemoButton";
+import { GuestEntryButton } from "@/components/auth/GuestEntryButton";
 
 function AuthCardContent() {
   const { setEcho } = useAuthForm();
@@ -20,7 +20,9 @@ function AuthCardContent() {
       <AuthCard>
         <Header />
 
-        <div className="mb-4">
+        <GuestEntryButton />
+
+        <div className="mb-4 mt-5">
           <TelegramButton onError={(text) => setEcho({ tone: "err", text })} />
           <Caption />
         </div>
@@ -35,8 +37,6 @@ function AuthCardContent() {
         <SubmitButton />
         <Footer />
       </AuthCard>
-
-      {process.env.NODE_ENV === "development" ? <DemoButton /> : null}
     </>
   );
 }

@@ -28,7 +28,9 @@ import {
   DEMO_FIGHTER_DB_ID,
   DEMO_FIGHTER_DISPLAY_NAME,
   DEMO_FIGHTER_PORTRAIT,
+  DEMO_TRAINING_THUMBNAIL,
 } from "@/lib/warrior-constants";
+import { DEFAULT_FIGHTER_IMAGE } from "@/lib/network";
 import {
   PassportView,
   type PassportStats,
@@ -174,7 +176,8 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
       role === "fighter" && isDemo
         ? "Cobra — агрессивный striker с высоким finishing rate..."
         : undefined,
-    portraitSrc: isDemo ? DEMO_FIGHTER_PORTRAIT : undefined,
+    portraitSrc: isDemo ? DEMO_FIGHTER_PORTRAIT : DEFAULT_FIGHTER_IMAGE,
+    trainingThumbnailSrc: isDemo ? DEMO_TRAINING_THUMBNAIL : DEFAULT_FIGHTER_IMAGE,
   };
 
   // ── Economy / membership data (training_sessions · fighter_stats) ─────────
