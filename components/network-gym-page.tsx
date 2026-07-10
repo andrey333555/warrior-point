@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { TrainerFitsYouBlock } from "@/components/trainer-fits-you-block";
 import {
   DEFAULT_FIGHTER_IMAGE,
   DEFAULT_GYM_IMAGE,
@@ -157,22 +158,49 @@ export default function NetworkGymPage({ gym }: { gym: Gym }) {
 
         <section className="mt-8">
           <p className="mb-3 text-sm font-medium text-gray-300">🔥 Тренеры</p>
-          <ul className="space-y-2">
+          <ul className="space-y-4">
             {gymTrainers.length === 0 ? (
               <li className="text-sm text-gray-600">Пока нет тренеров</li>
             ) : (
-              gymTrainers.map((t) => (
-                <li key={t.id}>
-                  <button
-                    type="button"
-                    onClick={() => router.push(`/trainer/${t.id}`)}
-                    className="flex w-full items-center justify-between rounded-xl bg-zinc-900 px-4 py-3 text-left transition-colors hover:bg-zinc-800"
-                  >
-                    <span className="font-medium">{t.name}</span>
-                    <span className="text-sm text-gray-500">→</span>
-                  </button>
-                </li>
-              ))
+              gymTrainers.map((t) => {
+                const trainingPrice = t.trainings[0]?.price ?? 1500;
+
+                return (
+                  <li key={t.id} className="rounded-xl bg-zinc-900 p-4">
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/trainer/${t.id}`)}
+                      className="flex w-full items-center justify-between text-left transition-colors hover:opacity-90"
+                    >
+                      <div>
+                        <span className="font-medium text-white">{t.name}</span>
+                        <p className="mt-0.5 text-xs text-gray-500">{t.experience} опыта</p>
+                      </div>
+                      <span className="text-sm text-gray-500">→</span>
+                    </button>
+
+                    <TrainerFitsYouBlock tips={t.fitsYou} />
+
+                    <div className="rounded-xl bg-black/40 p-3">
+                      <p className="text-sm text-gray-400">
+                        Итого:{" "}
+                        <span className="font-semibold text-yellow-400">
+                          {trainingPrice.toLocaleString("ru-RU")}₽
+                        </span>
+                      </p>
+                    </div>
+
+                    <Button
+                      fullWidth
+                      size="md"
+                      className="mt-3"
+                      onClick={() => router.push(`/booking/${t.id}`)}
+                    >
+                      Записаться
+                    </Button>
+                  </li>
+                );
+              })
             )}
           </ul>
         </section>

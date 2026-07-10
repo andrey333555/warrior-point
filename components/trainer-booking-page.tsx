@@ -8,6 +8,8 @@ import { usePayment } from "@/lib/usePayment";
 import { splitSettlement } from "@/lib/economy";
 import { Button } from "@/components/ui/button";
 import { ErrorMessage } from "@/components/ui/error-message";
+import InsuranceBlock from "@/components/InsuranceBlock";
+import { type InsurancePlan } from "@/lib/insurance";
 
 type TrainerBookingPageProps = {
   trainer: Trainer;
@@ -53,13 +55,16 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [trainingType, setTrainingType] = useState<TrainingTypeId>("split");
   const [screen, setScreen] = useState<Screen>("booking");
+  const [insurance, setInsurance] = useState<InsurancePlan | null>(null);
   const { paying, error: paymentError, pay, clearError } = usePayment();
 
   const canProceed = !!selectedGym && !!selectedDate && !!selectedTime;
 
   const dateLabel = DATES.find((d) => d.id === selectedDate)?.label ?? "—";
   const typeData = TRAINING_TYPES.find((t) => t.id === trainingType)!;
-  const settlement = splitSettlement(typeData.price);
+  const splitPrice = typeData.price;
+  const total = splitPrice + (insurance?.price ?? 0);
+  const settlement = splitSettlement(splitPrice);
 
   const handlePay = async () => {
     if (paying || !selectedGym || !selectedTime) return;
@@ -71,7 +76,7 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
       date: dateLabel,
       time: selectedTime,
       trainingType,
-      grossRub: typeData.price,
+      grossRub: total,
     });
   };
 
@@ -111,11 +116,40 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.12, type: "spring", stiffness: 260, damping: 24 }}
-          className="mt-8 rounded-2xl border border-yellow-400/25 bg-yellow-400/[0.06] p-6 text-center"
+          className="mt-6"
+        >
+          <InsuranceBlock selectedPlan={insurance} onToggle={setInsurance} />
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.15, type: "spring", stiffness: 260, damping: 24 }}
+          className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-5"
+        >
+          <p className="text-base font-semibold text-white">
+            Итого:{" "}
+            <span className="text-yellow-400">
+              {total.toLocaleString("ru-RU")}₽
+            </span>
+          </p>
+          <p className="mt-2 text-sm text-gray-400">
+            Тренировка: {splitPrice.toLocaleString("ru-RU")}₽
+          </p>
+          <p className="mt-1 text-sm text-gray-400">
+            Страховка: {insurance ? `${insurance.price}₽` : "—"}
+          </p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.18, type: "spring", stiffness: 260, damping: 24 }}
+          className="mt-6 rounded-2xl border border-yellow-400/25 bg-yellow-400/[0.06] p-6 text-center"
         >
           <p className="text-sm text-gray-400">К оплате</p>
           <p className="mt-2 font-[family-name:var(--font-jetbrains-mono)] text-5xl font-bold text-white">
-            {typeData.price.toLocaleString("ru-RU")}₽
+            {total.toLocaleString("ru-RU")}₽
           </p>
           <p className="mt-2 text-xs text-gray-500">
             {typeData.label} · комиссия 19% ({settlement.commission}₽) · тренеру {settlement.net}₽
@@ -133,7 +167,7 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
             disabled={paying}
             onClick={handlePay}
           >
-            {paying ? "Создаём платёж…" : `Войти в бой · ${typeData.price.toLocaleString("ru-RU")}₽`}
+            {paying ? "Создаём платёж…" : `Войти в бой · ${total.toLocaleString("ru-RU")}₽`}
           </Button>
           <p className="text-center text-[10px] text-gray-600">
             ЮKassa · карта / SberPay / СБП
@@ -262,6 +296,25 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
         </div>
       </div>
 
+      <div className="mt-7 px-4 pb-4">
+        <InsuranceBlock selectedPlan={insurance} onToggle={setInsurance} />
+
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+          <p className="text-base font-semibold text-white">
+            Итого:{" "}
+            <span className="text-yellow-400">
+              {total.toLocaleString("ru-RU")}₽
+            </span>
+          </p>
+          <p className="mt-2 text-sm text-gray-400">
+            Тренировка: {splitPrice.toLocaleString("ru-RU")}₽
+          </p>
+          <p className="mt-1 text-sm text-gray-400">
+            Страховка: {insurance ? `${insurance.price}₽` : "—"}
+          </p>
+        </div>
+      </div>
+
       <div className="fixed bottom-0 left-0 right-0 border-t border-white/[0.06] bg-black/95 p-4 backdrop-blur-md">
         <Button
           fullWidth
@@ -270,7 +323,7 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
           onClick={() => setScreen("payment")}
         >
           {canProceed
-            ? `Перейти к оплате · ${typeData.price.toLocaleString("ru-RU")}₽`
+            ? `Перейти к оплате · ${total.toLocaleString("ru-RU")}₽`
             : "Выберите дату и время"}
         </Button>
       </div>

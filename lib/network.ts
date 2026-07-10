@@ -45,6 +45,8 @@ export type Trainer = {
   gymLabels?: Record<number, string>;
   fighters: number[];
   trainings: TrainingType[];
+  /** Подсказки «подходит тебе, если» на карточке зала. */
+  fitsYou?: string[];
   rating: number;
   reviewsCount: number;
   reviews: Review[];
@@ -161,6 +163,7 @@ export const trainers: Trainer[] = [
     gymLabels: { 1: "Флагман", 2: "Филиал" },
     fighters: [1, 2, 3],
     trainings: STRIKING_SPLITS,
+    fitsYou: ["хочешь поставить ударку с нуля", "новичок в единоборствах"],
     rating: 4.8,
     reviewsCount: 120,
     reviews: [
@@ -188,6 +191,7 @@ export const trainers: Trainer[] = [
       { id: "t1", name: "Ударка", duration: "60 мин", price: 1800 },
       { id: "t2", name: "Персональная", duration: "60 мин", price: 3200 },
     ],
+    fitsYou: ["хочешь жёсткие спарринги", "уже есть база MMA"],
     rating: 4.6,
     reviewsCount: 74,
     reviews: [
@@ -214,6 +218,7 @@ export const trainers: Trainer[] = [
       { id: "t1", name: "Борьба", duration: "60 мин", price: 1600 },
       { id: "t2", name: "BJJ", duration: "90 мин", price: 2000 },
     ],
+    fitsYou: ["хочешь освоить BJJ", "интересует борьба в партере"],
     rating: 4.9,
     reviewsCount: 95,
     reviews: [
@@ -237,6 +242,7 @@ export const trainers: Trainer[] = [
     gyms: [3],
     fighters: [8, 9],
     trainings: STRIKING_SPLITS,
+    fitsYou: ["хочешь game plan под бой", "готов к системной подготовке"],
     rating: 4.7,
     reviewsCount: 210,
     reviews: [
@@ -259,6 +265,7 @@ export const trainers: Trainer[] = [
       { id: "t1", name: "MMA", duration: "90 мин", price: 2500 },
       { id: "t2", name: "Sparring", duration: "60 мин", price: 2200 },
     ],
+    fitsYou: ["готовишься к бою", "нужен fight camp"],
     rating: 4.7,
     reviewsCount: 88,
     reviews: [
@@ -280,6 +287,7 @@ export const trainers: Trainer[] = [
       { id: "t1", name: "Функционал", duration: "60 мин", price: 1400 },
       { id: "t2", name: "Сила", duration: "60 мин", price: 1600 },
     ],
+    fitsYou: ["хочешь прокачать выносливость", "готов к силовой базе"],
     rating: 4.5,
     reviewsCount: 52,
     reviews: [
@@ -302,6 +310,7 @@ export const trainers: Trainer[] = [
       { id: "t1", name: "Ударка", duration: "60 мин", price: 3000 },
       { id: "t2", name: "VIP сплит", duration: "90 мин", price: 5000 },
     ],
+    fitsYou: ["хочешь ударку на высоком уровне", "готов к интенсиву"],
     rating: 5.0,
     reviewsCount: 47,
     reviews: [
