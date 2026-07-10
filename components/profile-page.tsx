@@ -9,6 +9,10 @@ import { useXp, levelFromXp, xpForNextLevel, xpProgress } from "@/lib/xp";
 import { useGoals, goalPercent, ensureDefaultGoals, type UserGoal } from "@/lib/goals";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import WalletWidget from "@/components/wallet-widget";
+import StreakWidget from "@/components/streak-widget";
+import { createStreakData } from "@/lib/loyalty";
+import { useWallet } from "@/lib/wallet-store";
 
 // ── Static user config ────────────────────────────────────────────────────────
 
@@ -292,6 +296,12 @@ export default function ProfilePage() {
   const xpNext = xpForNextLevel(xpState.total);
 
   const goals = useGoals();
+  const wallet = useWallet();
+
+  const streakData = useMemo(
+    () => createStreakData(xpState.streakDays, xpState.lastWorkoutDate),
+    [xpState.streakDays, xpState.lastWorkoutDate],
+  );
 
   const upcoming = bookings.filter((b) => b.status === "upcoming");
   const completed = bookings.filter((b) => b.status === "completed");
@@ -375,6 +385,30 @@ export default function ProfilePage() {
       </motion.div>
 
       <div className="wp-sections px-4 pb-8">
+
+        <section className="mb-6">
+          <SectionTitle>Серия</SectionTitle>
+          <StreakWidget
+            streak={streakData}
+            onBookSplit={() => router.push("/booking")}
+          />
+        </section>
+
+        <section className="mb-6">
+          <SectionTitle>Кошелёк</SectionTitle>
+          <WalletWidget
+            wallet={wallet}
+            isVIP={false}
+            streak={xpState.streakDays}
+          />
+          <button
+            type="button"
+            onClick={() => router.push("/referral")}
+            className="mt-3 w-full rounded-2xl border border-yellow-400/30 bg-yellow-400/10 px-4 py-3.5 text-sm font-semibold text-yellow-400 transition hover:border-yellow-400/50 hover:bg-yellow-400/15 active:scale-[0.99]"
+          >
+            🎁 Пригласи друга — получи 300₽
+          </button>
+        </section>
 
         {/* ── PROGRESS ── */}
         <section>

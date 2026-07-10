@@ -368,10 +368,27 @@ export default function TrainerPage({ trainer }: TrainerPageProps) {
 
       <ReviewsBlock trainer={trainer} />
 
-      <div className="fixed bottom-0 left-0 right-0 border-t border-white/[0.06] bg-black/95 p-4 backdrop-blur-md">
-        <Button fullWidth size="lg" onClick={() => router.push(`/booking/${trainer.id}`)}>
-          Записаться
-        </Button>
+      <div
+        className="fixed bottom-0 left-0 right-0 z-50 p-4"
+        style={{
+          background: "linear-gradient(to top, #0A0A0A 80%, transparent)",
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => router.push(`/booking/${trainer.id}`)}
+          className="w-full rounded-xl py-4 font-semibold"
+          style={{
+            background: "#C9A84C",
+            color: "#0A0A0A",
+            boxShadow: "0 0 24px rgba(201,168,76,0.3)",
+          }}
+        >
+          ⚡ Записаться · {selected.price.toLocaleString("ru-RU")}₽
+        </button>
+        <p className="mt-2 text-center text-xs text-white/20">
+          🔒 Безопасная оплата
+        </p>
       </div>
     </div>
 

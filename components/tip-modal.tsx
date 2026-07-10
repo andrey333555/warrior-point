@@ -153,8 +153,7 @@ export function TipModal({
               <Button
                 fullWidth
                 size="lg"
-                loading={screen === "paying"}
-                disabled={!canPay || screen === "paying"}
+                disabled={!canPay}
                 onClick={handlePay}
                 className="mt-5"
               >

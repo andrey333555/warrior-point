@@ -9,17 +9,22 @@ const LINKS = [
   { href: "/map", label: "Карты", match: /^\/map/, variant: "map" as const },
 ];
 
+/** Nav visible only on main hub screens — hidden on booking, trainer, flows, etc. */
+const NAV_VISIBLE_ROUTES = new Set(["/", "/map", "/leaderboard", "/profile"]);
+
+function isNavVisible(pathname: string): boolean {
+  return NAV_VISIBLE_ROUTES.has(pathname);
+}
+
 /**
  * Floating jeweller-grade pill — sits centred above the safe area so the
  * Warrior Passport composition reads as one continuous object from hex
  * cluster down to the rail.
  */
 export function CyberNav() {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "";
 
-  // The home route runs the monolithic Tactical OS, which ships its own
-  // floating nav — suppress the global rail there to avoid a double nav.
-  if ((pathname ?? "") === "/") return null;
+  if (!isNavVisible(pathname)) return null;
 
   return (
     <nav

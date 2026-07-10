@@ -4,8 +4,8 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { getGymsForTrainer, type Gym, type Trainer } from "@/lib/network";
-import { addBooking } from "@/lib/bookings";
-import { awardTrainingXp, getXp, levelFromXp } from "@/lib/xp";
+import { usePayment } from "@/lib/usePayment";
+import { splitSettlement } from "@/lib/economy";
 import { Button } from "@/components/ui/button";
 import { ErrorMessage } from "@/components/ui/error-message";
 
@@ -29,7 +29,7 @@ const TRAINING_TYPES = [
 ] as const;
 
 type TrainingTypeId = (typeof TRAINING_TYPES)[number]["id"];
-type Screen = "booking" | "payment" | "confirmed";
+type Screen = "booking" | "payment";
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return <p className="mb-2 text-sm text-gray-400">{children}</p>;
@@ -53,169 +53,32 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [trainingType, setTrainingType] = useState<TrainingTypeId>("split");
   const [screen, setScreen] = useState<Screen>("booking");
-  const [paying, setPaying] = useState(false);
-  const [paymentError, setPaymentError] = useState<string | null>(null);
-  const [xpGained, setXpGained] = useState<{ amount: number; newLevel?: number } | null>(null);
+  const { paying, error: paymentError, pay, clearError } = usePayment();
 
   const canProceed = !!selectedGym && !!selectedDate && !!selectedTime;
 
   const dateLabel = DATES.find((d) => d.id === selectedDate)?.label ?? "—";
   const typeData = TRAINING_TYPES.find((t) => t.id === trainingType)!;
+  const settlement = splitSettlement(typeData.price);
 
   const handlePay = async () => {
     if (paying || !selectedGym || !selectedTime) return;
-    setPaying(true);
-    setPaymentError(null);
 
-    try {
-      await new Promise((r) => setTimeout(r, 1500));
-
-      addBooking({
-        trainerId: trainer.id,
-        trainerName: trainer.name,
-        gymName: selectedGym.name,
-        date: dateLabel,
-        time: selectedTime,
-        type: trainingType,
-      });
-
-      try {
-        const { total: xpBefore } = { total: getXp().total };
-        const xpState = awardTrainingXp(`${typeData.label} · ${trainer.name}`);
-        const gained = xpState.total - xpBefore;
-        const levelBefore = levelFromXp(xpBefore);
-        const levelAfter = levelFromXp(xpState.total);
-        setXpGained({
-          amount: gained,
-          newLevel: levelAfter > levelBefore ? levelAfter : undefined,
-        });
-      } catch (xpErr) {
-        if (process.env.NODE_ENV === "development") {
-          console.warn("[booking] XP award failed:", xpErr);
-        }
-      }
-
-      setScreen("confirmed");
-
-      const gym = selectedGym;
-      const time = selectedTime;
-      setTimeout(() => {
-        // eslint-disable-next-line no-alert
-        alert(
-          `🔔 Тренировка скоро!\n\n${trainer.name}\n${time} · ${gym.name}\n\nОстался 1 час — удачи!`,
-        );
-      }, 5000);
-    } catch (err) {
-      setPaymentError("Не удалось сохранить запись. Попробуй ещё раз.");
-      if (process.env.NODE_ENV === "development") {
-        console.warn("[booking] payment failed:", err);
-      }
-    } finally {
-      setPaying(false);
-    }
+    await pay({
+      trainerId: trainer.id,
+      trainerName: trainer.name,
+      gymName: selectedGym.name,
+      date: dateLabel,
+      time: selectedTime,
+      trainingType,
+      grossRub: typeData.price,
+    });
   };
-
-  // ── Confirmed ──────────────────────────────────────────────────────────────
-  if (screen === "confirmed") {
-    return (
-      <div className="flex min-h-screen flex-col bg-black px-5 pb-8 pt-20 text-white">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.7 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ type: "spring", stiffness: 320, damping: 22 }}
-          className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-yellow-400 text-4xl"
-        >
-          ✓
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-        >
-          <h1 className="text-center text-2xl font-bold">Ты записан</h1>
-          <p className="mt-2 text-center text-sm text-gray-500">
-            Оплата прошла · запись добавлена в паспорт
-          </p>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25 }}
-          className="mt-8 space-y-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-5"
-        >
-          <Row label="Тренер" value={trainer.name} />
-          <Row label="Зал" value={selectedGym?.name ?? "—"} />
-          <Row label="Дата" value={dateLabel} />
-          <Row label="Время" value={selectedTime ?? "—"} />
-          <Row label="Тип" value={typeData.label} />
-          <div className="flex items-center justify-between border-t border-zinc-800 pt-3">
-            <span className="text-sm text-gray-500">Оплачено</span>
-            <span className="font-[family-name:var(--font-jetbrains-mono)] text-base font-bold text-yellow-400">
-              {typeData.price.toLocaleString("ru-RU")}₽
-            </span>
-          </div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.35 }}
-          className="mt-4 flex items-center gap-2.5 rounded-2xl border border-zinc-800 bg-zinc-900/60 px-4 py-3"
-        >
-          <span>🔔</span>
-          <p className="text-sm text-gray-400">Напомним за час до тренировки</p>
-        </motion.div>
-
-        {xpGained ? (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-            className="mt-3 flex items-center gap-3 rounded-2xl border border-yellow-400/25 bg-yellow-400/[0.06] px-4 py-3"
-          >
-            <span className="text-lg">⚡</span>
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-yellow-400">
-                +{xpGained.amount} XP
-              </p>
-              {xpGained.newLevel ? (
-                <p className="text-xs text-yellow-400/70">
-                  🎉 Level up! Ты теперь Level {xpGained.newLevel}
-                </p>
-              ) : (
-                <p className="text-xs text-gray-500">Начислено за тренировку</p>
-              )}
-            </div>
-          </motion.div>
-        ) : null}
-
-        <div className="mt-auto space-y-3 pt-8">
-          <Button
-            fullWidth
-            size="lg"
-            onClick={() => router.push(`/chat/${trainer.id}`)}
-          >
-            Написать тренеру
-          </Button>
-          <Button
-            fullWidth
-            size="lg"
-            variant="secondary"
-            onClick={() => router.push("/profile")}
-          >
-            В паспорт
-          </Button>
-        </div>
-      </div>
-    );
-  }
 
   // ── Payment ────────────────────────────────────────────────────────────────
   if (screen === "payment") {
     return (
-      <div className="flex min-h-screen flex-col bg-black px-5 pb-8 pt-6 text-white">
+      <div className="flex min-h-screen flex-col bg-black px-5 pb-24 pt-6 text-white">
         <header className="mb-8">
           <button
             type="button"
@@ -255,13 +118,13 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
             {typeData.price.toLocaleString("ru-RU")}₽
           </p>
           <p className="mt-2 text-xs text-gray-500">
-            {typeData.label} · {typeData.hint}
+            {typeData.label} · комиссия 19% ({settlement.commission}₽) · тренеру {settlement.net}₽
           </p>
         </motion.div>
 
         <div className="mt-auto space-y-3 pt-8">
           {paymentError ? (
-            <ErrorMessage message={paymentError} onRetry={() => setPaymentError(null)} />
+            <ErrorMessage message={paymentError} onRetry={clearError} />
           ) : null}
           <Button
             fullWidth
@@ -270,8 +133,11 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
             disabled={paying}
             onClick={handlePay}
           >
-            Оплатить {typeData.price.toLocaleString("ru-RU")}₽
+            {paying ? "Создаём платёж…" : `Войти в бой · ${typeData.price.toLocaleString("ru-RU")}₽`}
           </Button>
+          <p className="text-center text-[10px] text-gray-600">
+            ЮKassa · карта / SberPay / СБП
+          </p>
         </div>
       </div>
     );
@@ -279,7 +145,7 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
 
   // ── Booking form ───────────────────────────────────────────────────────────
   return (
-    <div className="mx-auto min-h-[100dvh] max-w-lg bg-black pb-[calc(5.5rem+env(safe-area-inset-bottom))] text-white">
+    <div className="mx-auto min-h-screen max-w-lg bg-black pb-24 text-white">
       <header className="px-4 py-3">
         <button
           type="button"

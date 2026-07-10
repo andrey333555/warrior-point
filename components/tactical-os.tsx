@@ -119,11 +119,6 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
     window.setTimeout(() => setEcho(null), 2800);
   }, []);
 
-  const onApplyTraining = useCallback(() => {
-    setEcho("Заявка на персональные тренировки · скоро");
-    window.setTimeout(() => setEcho(null), 2800);
-  }, []);
-
   const onDonateSuccess = useCallback((message: string) => {
     setEcho(message);
     window.setTimeout(() => setEcho(null), 3200);
@@ -283,7 +278,6 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
                 totalXp={totalXp}
                 onCreateSplit={onCreateSplit}
                 onPlayVideo={setActiveVideo}
-                onApplyTraining={onApplyTraining}
                 onDonateSuccess={onDonateSuccess}
               />
             ) : (

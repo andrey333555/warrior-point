@@ -105,8 +105,6 @@ export function SupportModal({
                 fullWidth
                 size="lg"
                 variant="rose"
-                loading={screen === "paying"}
-                disabled={screen === "paying"}
                 onClick={handlePay}
                 className="mt-5"
               >

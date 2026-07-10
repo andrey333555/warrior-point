@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import CompleteSession from "@/components/session-complete-page";
 
 export const metadata: Metadata = {
@@ -14,6 +15,7 @@ type PageProps = {
     gym?: string;
     gross?: string;
     type?: string;
+    paymentId?: string;
   }>;
 };
 
@@ -24,13 +26,16 @@ export default async function SessionCompleteRoute({ searchParams }: PageProps) 
   const grossRub = sp.gross ? Number.parseInt(sp.gross, 10) : undefined;
 
   return (
-    <CompleteSession
-      bookingId={sp.bookingId}
-      trainerId={Number.isFinite(trainerId) ? trainerId : undefined}
-      trainerName={sp.trainer}
-      gymName={sp.gym}
-      grossRub={Number.isFinite(grossRub) ? grossRub : undefined}
-      trainingType={sp.type}
-    />
+    <Suspense fallback={null}>
+      <CompleteSession
+        bookingId={sp.bookingId}
+        trainerId={Number.isFinite(trainerId) ? trainerId : undefined}
+        trainerName={sp.trainer}
+        gymName={sp.gym}
+        grossRub={Number.isFinite(grossRub) ? grossRub : undefined}
+        trainingType={sp.type}
+        paymentId={sp.paymentId}
+      />
+    </Suspense>
   );
 }

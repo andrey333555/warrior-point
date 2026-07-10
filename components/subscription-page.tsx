@@ -40,7 +40,7 @@ export default function SubscriptionPage({ trainer }: { trainer: Trainer }) {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-black pb-24 text-white">
       {/* Header */}
       <header className="relative flex items-center px-4 py-4">
         <button

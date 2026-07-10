@@ -11,6 +11,7 @@
 
 import { AnimatePresence, animate, motion, useMotionValue, useTransform } from "framer-motion";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RoundMini } from "@/components/RoundProgress";
 import { FightsList } from "@/components/fights-list";
@@ -518,19 +519,35 @@ function ContractsScroll({
   );
 }
 
-function PersonalTrainingCard({ onApply }: { onApply?: () => void }) {
+function PersonalTrainingCard() {
+  const router = useRouter();
+
   return (
     <div
-      className={`mx-4 mt-6 rounded-xl border border-purple-500/20 bg-gradient-to-br from-purple-900/30 to-black p-4 ${EASE}`}
+      className={`mx-4 mt-6 rounded-xl border border-yellow-400/20 bg-gradient-to-br from-yellow-900/20 to-black p-4 ${EASE}`}
     >
-      <p className="text-xs text-white/60">ПЕРСОНАЛЬНЫЕ ТРЕНИРОВКИ</p>
-      <h3 className="mt-1 text-lg font-semibold text-white">Ограниченный доступ</h3>
+      <p className="text-xs uppercase tracking-wider text-white/50">
+        Персональные тренировки
+      </p>
       <button
         type="button"
-        onClick={onApply}
-        className="mt-3 w-full rounded-lg bg-purple-500/80 py-2 text-sm font-semibold text-white transition-all duration-300 ease-out hover:bg-purple-400 active:scale-[0.98]"
+        onClick={() => router.push("/trainer")}
+        className="mt-3 w-full rounded-xl py-4 font-semibold transition active:scale-[0.98]"
+        style={{ background: "#C9A84C", color: "#0A0A0A" }}
       >
-        Подать заявку
+        🥊 Записаться на тренировку
+      </button>
+      <button
+        type="button"
+        onClick={() => router.push("/booking/1")}
+        className="mt-2 w-full rounded-xl py-3 text-sm font-medium transition active:scale-[0.98]"
+        style={{
+          background: "rgba(201,168,76,0.15)",
+          color: "#C9A84C",
+          border: "0.5px solid rgba(201,168,76,0.3)",
+        }}
+      >
+        ⚡ Персональная тренировка · от 3 000₽
       </button>
     </div>
   );
@@ -596,7 +613,6 @@ export function PassportView({
   totalXp = 0,
   onCreateSplit,
   onPlayVideo,
-  onApplyTraining,
   onDonateSuccess,
 }: {
   role: RoleMode;
@@ -607,7 +623,6 @@ export function PassportView({
   totalXp?: number;
   onCreateSplit?: () => void;
   onPlayVideo?: (video: Video) => void;
-  onApplyTraining?: () => void;
   onDonateSuccess?: (message: string) => void;
 }) {
   const accent = ROLE_ACCENT[role];
@@ -874,18 +889,18 @@ export function PassportView({
       {role === "fighter" ? (
         <motion.div
           layout
-          transition={CONTRACT_PANEL_TRANSITION}
           {...sectionMotion(0.18)}
+          transition={CONTRACT_PANEL_TRANSITION}
         >
-          <PersonalTrainingCard onApply={onApplyTraining} />
+          <PersonalTrainingCard />
         </motion.div>
       ) : null}
 
       {role === "fighter" && latestFight ? (
         <motion.div
           layout
-          transition={CONTRACT_PANEL_TRANSITION}
           {...sectionMotion(0.2)}
+          transition={CONTRACT_PANEL_TRANSITION}
         >
           <LastFightPreview
             fight={latestFight}
