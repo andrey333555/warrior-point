@@ -3,9 +3,8 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { markTipped } from "@/lib/bookings";
+import { TIP_PRESETS } from "@/lib/tip-presets";
 import { Button } from "@/components/ui/button";
-
-const PRESET_AMOUNTS = [100, 300, 500];
 
 type Screen = "pick" | "paying" | "done";
 
@@ -109,7 +108,7 @@ export function TipModal({
 
               {/* Preset amounts */}
               <div className="mt-6 grid grid-cols-3 gap-2">
-                {PRESET_AMOUNTS.map((amt) => (
+                {TIP_PRESETS.map((amt) => (
                   <button
                     key={amt}
                     type="button"

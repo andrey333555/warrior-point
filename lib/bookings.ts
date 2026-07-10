@@ -152,6 +152,25 @@ export function markTipped(bookingId: string): void {
   }
 }
 
+export function completeBooking(bookingId: string): Booking | null {
+  try {
+    let found: Booking | null = null;
+    const next = getBookings().map((b) => {
+      if (b.id !== bookingId) return b;
+      found = { ...b, status: "completed" as const };
+      return found;
+    });
+    if (!found) return null;
+    persist(next);
+    return found;
+  } catch (err) {
+    if (process.env.NODE_ENV === "development") {
+      console.warn("[bookings] completeBooking failed:", err);
+    }
+    return null;
+  }
+}
+
 export type AddBookingInput = Omit<Booking, "id" | "status">;
 
 export function addBooking(input: AddBookingInput): Booking {

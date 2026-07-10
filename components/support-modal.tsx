@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-
-const PRESETS = [100, 300, 500];
+import { TIP_PRESETS } from "@/lib/tip-presets";
 
 type Screen = "pick" | "paying" | "done";
 
@@ -86,7 +85,7 @@ export function SupportModal({
               <p className="mt-1 text-sm text-gray-500">{trainerName}</p>
 
               <div className="mt-6 grid grid-cols-3 gap-2">
-                {PRESETS.map((amt) => (
+                {TIP_PRESETS.map((amt) => (
                   <button
                     key={amt}
                     type="button"
