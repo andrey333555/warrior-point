@@ -1,8 +1,8 @@
 /** Human-facing demo fighter name (HUD hero). */
-export const DEMO_FIGHTER_DISPLAY_NAME = "Боец Бойцов";
+export const DEMO_FIGHTER_DISPLAY_NAME = "King";
 
 /** Full legal name for profiles / official records. */
-export const DEMO_FIGHTER_FULL_NAME = "Боец Бойцов";
+export const DEMO_FIGHTER_FULL_NAME = "King León";
 
 /** Passport display glyph (shown in HUD as ID badge). */
 export const DEMO_FIGHTER_DISPLAY_ID = "WP·INTL·X9·441K";
@@ -11,7 +11,7 @@ export const DEMO_FIGHTER_DISPLAY_ID = "WP·INTL·X9·441K";
 export const DEMO_FIGHTER_DB_ID = DEMO_FIGHTER_DISPLAY_ID.replace(/·/g, "-");
 
 /** Initials for HexAvatar fallback when no portrait is bound. */
-export const DEMO_FIGHTER_INITIALS = "ББ";
+export const DEMO_FIGHTER_INITIALS = "KG";
 
 /** Official club affiliation. */
 export const DEMO_FIGHTER_CLUB = 'БК «Кузня» (Анапа / Краснодар)';
@@ -29,9 +29,7 @@ export const DEMO_FIGHTER_COACH = "Олег Владимирович";
 export const DEMO_COMBAT_SCORE = 92.4 as const;
 
 /** Portrait for demo fighter passport (hero + avatar). */
-export const DEMO_FIGHTER_PORTRAIT =
-  "https://images.unsplash.com/photo-1599058917765-a780eda07a3e?w=1200&q=85&auto=format&fit=crop&crop=faces";
+export const DEMO_FIGHTER_PORTRAIT = "/fighters/king-ufc-portrait.png";
 
 /** Training video thumbnail on passport (bottom preview). */
-export const DEMO_TRAINING_THUMBNAIL =
-  "https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?w=1200&q=85&auto=format&fit=crop";
+export const DEMO_TRAINING_THUMBNAIL = "/fighters/king-ufc-portrait.png";

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   bookingDates,
   bookingGym,
@@ -25,6 +26,7 @@ function StepLabel({ title, hint }: { title: string; hint: string }) {
 }
 
 export default function BookingPage() {
+  const router = useRouter();
   const trainer = trainers[0]!;
   const defaultSplit = trainer.trainings[0]!;
 
@@ -149,7 +151,11 @@ export default function BookingPage() {
         </p>
       </div>
 
-      <Button fullWidth disabled={!selectedDate || !selectedTime}>
+      <Button
+        fullWidth
+        disabled={!selectedDate || !selectedTime}
+        onClick={() => router.push(`/booking/${trainer.id}`)}
+      >
         Подтвердить запись
       </Button>
     </div>

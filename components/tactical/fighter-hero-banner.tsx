@@ -38,8 +38,7 @@ export function PassportHero({
 }: PassportHeroProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [scrollY, setScrollY] = useState(0);
-  const fallback =
-    "https://images.unsplash.com/photo-1599058917765-a780eda07a3e?w=900&q=80";
+  const fallback = "/fighters/king-ufc-portrait.png";
   const [src, setSrc] = useState(imageSrc || fallback);
 
   useEffect(() => {
@@ -69,13 +68,13 @@ export function PassportHero({
         <img
           src={src}
           alt=""
-          className="absolute inset-0 h-full w-full object-cover object-top"
+          className="absolute inset-0 h-full w-full object-cover object-[center_15%]"
           onError={() => {
             if (src !== fallback) setSrc(fallback);
           }}
         />
 
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/25 to-transparent" />
 
         <div
           className="absolute inset-0"

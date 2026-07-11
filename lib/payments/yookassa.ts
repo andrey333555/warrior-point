@@ -63,3 +63,31 @@ export async function createYooKassaPayment(opts: {
 
   return { yookassaId: data.id, confirmationUrl };
 }
+
+/**
+ * Authoritative payment status straight from YooKassa.
+ * Webhook payloads are untrusted — we re-fetch by id to confirm.
+ */
+export async function getYooKassaPayment(
+  yookassaId: string,
+): Promise<{ id: string; status: string; amountRub: number } | null> {
+  const creds = getCredentials();
+  if (!creds) return null;
+
+  const res = await fetch(`https://api.yookassa.ru/v3/payments/${yookassaId}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${creds.shopId}:${creds.secretKey}`).toString("base64")}`,
+    },
+  });
+
+  if (!res.ok) return null;
+
+  const data = (await res.json()) as {
+    id: string;
+    status: string;
+    amount?: { value?: string };
+  };
+  const amountRub = Number.parseFloat(data.amount?.value ?? "0");
+  return { id: data.id, status: data.status, amountRub };
+}

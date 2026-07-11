@@ -1,5 +1,10 @@
 "use client";
 
+/**
+ * Local booking + XP rewards after a **system-verified** fixation sync.
+ * Do not call directly from check-in UI — use fixation-sync instead.
+ */
+
 import { addBooking, completeBooking } from "@/lib/bookings";
 import { awardTrainingXp, getXp } from "@/lib/xp";
 import type {

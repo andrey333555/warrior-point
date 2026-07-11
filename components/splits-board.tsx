@@ -11,7 +11,7 @@ import {
   createSplit,
   cancelSplit,
 } from "@/lib/supabase/splits-sync";
-import { handleBookSplit } from "@/lib/supabase/split-booking";
+import { bookSplitSeat } from "@/lib/split-booking-api";
 import { SplitCreator } from "@/components/split-creator";
 import { SplitCard } from "@/components/split-card";
 
@@ -93,10 +93,7 @@ export function SplitsBoard({
 
   const handleBook = useCallback(
     async (splitId: string) => {
-      if (!client)
-        return { activated: false, error: new Error("Supabase not configured") };
-
-      const result = await handleBookSplit(client, {
+      const result = await bookSplitSeat({
         clientId: currentFighterId,
         splitId,
       });
@@ -109,7 +106,7 @@ export function SplitsBoard({
 
       return { activated: false, error: new Error(result.message) };
     },
-    [client, currentFighterId, refresh],
+    [currentFighterId, refresh],
   );
 
   const handleCancel = useCallback(

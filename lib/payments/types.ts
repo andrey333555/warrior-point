@@ -7,6 +7,8 @@ export type PaymentIntent = {
   id: string;
   yookassaId?: string;
   status: PaymentStatus;
+  /** Fighter (profile id) paying for the session — server rewards target. */
+  fighterId?: string;
   trainerId: number;
   trainerName: string;
   gymName: string;
@@ -29,6 +31,7 @@ export type PaymentSettlement = {
 };
 
 export type CreatePaymentInput = {
+  fighterId?: string;
   trainerId: number;
   trainerName: string;
   gymName: string;

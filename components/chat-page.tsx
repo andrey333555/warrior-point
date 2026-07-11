@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { DEFAULT_TRAINER_IMAGE, type Trainer } from "@/lib/network";
 import { useBookings } from "@/lib/bookings";
 import { hasChatAccess, useChat, type ChatMessage } from "@/lib/chat";
+import { useBackOrHome } from "@/hooks/use-back-or-home";
 import { Button } from "@/components/ui/button";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -120,6 +121,7 @@ function LockedChat({ trainer, onPay }: { trainer: Trainer; onPay: () => void })
 
 export default function ChatPage({ trainer }: { trainer: Trainer }) {
   const router = useRouter();
+  const goBack = useBackOrHome(`/trainer/${trainer.id}`);
   const bookings = useBookings();
   const hasAccess = useMemo(
     () => hasChatAccess(trainer.id, trainer.name),
@@ -154,7 +156,7 @@ export default function ChatPage({ trainer }: { trainer: Trainer }) {
       <header className="flex items-center gap-3 border-b border-white/[0.07] px-4 py-3">
         <button
           type="button"
-          onClick={() => router.back()}
+          onClick={goBack}
           className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[9px] uppercase tracking-[0.16em] text-neutral-400"
         >
           ←

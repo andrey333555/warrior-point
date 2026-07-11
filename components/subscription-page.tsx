@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { useRouter } from "next/navigation";
 import { DEFAULT_TRAINER_IMAGE, type Trainer } from "@/lib/network";
 import { useSubscription } from "@/lib/subscriptions";
+import { useBackOrHome } from "@/hooks/use-back-or-home";
 import { Button } from "@/components/ui/button";
 
 const PERKS = [
@@ -18,7 +18,7 @@ const PERKS = [
 type Screen = "info" | "paying" | "done";
 
 export default function SubscriptionPage({ trainer }: { trainer: Trainer }) {
-  const router = useRouter();
+  const goBack = useBackOrHome(`/trainer/${trainer.id}`);
   const { subscribed, subscribe } = useSubscription(trainer.id);
   const [screen, setScreen] = useState<Screen>("info");
   const [paying, setPaying] = useState(false);
@@ -45,7 +45,7 @@ export default function SubscriptionPage({ trainer }: { trainer: Trainer }) {
       <header className="relative flex items-center px-4 py-4">
         <button
           type="button"
-          onClick={() => router.back()}
+          onClick={goBack}
           className="rounded-full border border-white/10 bg-black/50 px-2.5 py-1 text-[9px] uppercase tracking-[0.16em] text-neutral-400"
         >
           ← Назад
@@ -139,7 +139,7 @@ export default function SubscriptionPage({ trainer }: { trainer: Trainer }) {
                 ))}
               </div>
 
-              <Button variant="secondary" fullWidth onClick={() => router.back()}>
+              <Button variant="secondary" fullWidth onClick={goBack}>
                 К тренеру
               </Button>
             </motion.div>

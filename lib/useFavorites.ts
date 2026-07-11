@@ -1,27 +1,35 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { loadData, saveData } from "@/lib/storage";
 
-export function useFavorites(key: string) {
+export function useFavorites(key: string, opts?: { max?: number }) {
   const [items, setItems] = useState<string[]>([]);
+  const [ready, setReady] = useState(false);
+  const max = opts?.max;
 
   useEffect(() => {
-    const stored = localStorage.getItem(key);
-    if (stored) setItems(JSON.parse(stored));
+    setItems(loadData<string[]>(key, []));
+    setReady(true);
   }, [key]);
 
-  const toggle = (id: string) => {
-    let updated;
+  const toggle = useCallback(
+    (id: string) => {
+      setItems((prev) => {
+        let updated: string[];
+        if (prev.includes(id)) {
+          updated = prev.filter((item) => item !== id);
+        } else if (max && prev.length >= max) {
+          updated = [...prev.slice(1), id];
+        } else {
+          updated = [...prev, id];
+        }
+        saveData(key, updated);
+        return updated;
+      });
+    },
+    [key, max],
+  );
 
-    if (items.includes(id)) {
-      updated = items.filter((i) => i !== id);
-    } else {
-      updated = [...items, id];
-    }
-
-    setItems(updated);
-    localStorage.setItem(key, JSON.stringify(updated));
-  };
-
-  return { items, toggle };
+  return { items, toggle, ready };
 }

@@ -1,11 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  handleDonate,
-  handleGuestSbpDonate,
-  type DonateResult,
-  type FundraiserProgress,
-  fetchFundraiserProgress,
-} from "@/lib/supabase/donations";
+import type { DonateResult, FundraiserProgress } from "@/lib/supabase/donations";
 import { getOrCreateGuestDonorId } from "@/lib/guest-donor";
 import {
   localFundraiserProgress,
@@ -36,15 +29,26 @@ export type FighterDonationOptions = {
   fundraiserFallback?: FundraiserProgress;
 };
 
+type DonateApiResponse = {
+  ok: boolean;
+  message?: string;
+  donationId?: string;
+  source?: "wallet" | "sbp_guest";
+  grossRub?: number;
+  netRub?: number;
+  newDonorBalance?: number;
+  fundraiser?: FundraiserProgress;
+};
+
 /**
- * Unified fighter tip — Yandex Music model:
- * 1. Guest / external user → SBP (no login)
- * 2. Member with balance → wallet when possible
- * 3. Otherwise → SBP guest
- * 4. Supabase down → local ledger (still succeeds for UX)
+ * Unified fighter tip — Yandex Music model.
+ *
+ * Balance mutations run **server-side** (`/api/donations/create`,
+ * service-role) so the browser anon key never touches `profiles.balance`.
+ * Fallback: server unreachable / Supabase down → local ledger (UX still
+ * succeeds in demo).
  */
 export async function submitFighterDonation(
-  client: SupabaseClient | null,
   opts: FighterDonationOptions,
 ): Promise<FighterDonationResult> {
   const { recipientId, grossRub, comment, viewerId, fundraiserFallback } = opts;
@@ -56,77 +60,41 @@ export async function submitFighterDonation(
     pct: 1,
   };
 
-  const canUseWallet =
-    client &&
-    viewerId &&
-    viewerId !== recipientId &&
-    grossRub >= 50;
-
-  if (canUseWallet) {
-    const walletResult = await handleDonate(client, {
-      donorId: viewerId,
-      recipientId,
-      grossRub,
-      comment,
-    });
-
-    if (walletResult.ok) {
-      const fundraiser = client
-        ? localFundraiserProgress(
-            recipientId,
-            await fetchFundraiserProgress(client, recipientId, fallback),
-          )
-        : fallback;
-
-      return {
-        ok: true,
-        grossRub: walletResult.breakdown.gross,
-        netRub: walletResult.breakdown.net,
-        donationId: walletResult.donationId,
-        source: "wallet",
-        newDonorBalance: walletResult.newDonorBalance,
-        fundraiser,
-      };
-    }
-
-    if (
-      walletResult.code !== "INSUFFICIENT_BALANCE" &&
-      walletResult.code !== "UNAUTHENTICATED" &&
-      walletResult.code !== "SELF_DONATE"
-    ) {
-      // Fall through to SBP for recoverable cases only
-      if (walletResult.code === "INVALID_AMOUNT") {
-        return { ok: false, message: walletResult.message };
-      }
-    }
-  }
-
   const guestDonorId = getOrCreateGuestDonorId();
 
-  if (client) {
-    const sbpResult = await handleGuestSbpDonate(client, {
-      guestDonorId,
-      recipientId,
-      grossRub,
-      comment,
+  try {
+    const res = await fetch("/api/donations/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        recipientId,
+        grossRub,
+        comment,
+        donorId: viewerId && viewerId !== recipientId ? viewerId : undefined,
+        guestDonorId,
+        fundraiserFallback: fallback,
+      }),
     });
 
-    if (sbpResult.ok) {
-      const fundraiser = localFundraiserProgress(
-        recipientId,
-        await fetchFundraiserProgress(client, recipientId, fallback),
-      );
+    const data = (await res.json()) as DonateApiResponse;
 
+    if (res.status === 400) {
+      return { ok: false, message: data.message ?? "Некорректный донат" };
+    }
+
+    if (res.ok && data.ok) {
       return {
         ok: true,
-        grossRub: sbpResult.breakdown.gross,
-        netRub: sbpResult.breakdown.net,
-        donationId: sbpResult.donationId,
-        source: "sbp_guest",
-        newDonorBalance: 0,
-        fundraiser,
+        grossRub: data.grossRub ?? grossRub,
+        netRub: data.netRub ?? grossRub,
+        donationId: data.donationId ?? "",
+        source: data.source ?? "sbp_guest",
+        newDonorBalance: data.newDonorBalance ?? 0,
+        fundraiser: localFundraiserProgress(recipientId, data.fundraiser ?? fallback),
       };
     }
+  } catch {
+    // network / server down — fall through to the local ledger
   }
 
   const local = recordLocalGuestDonation({

@@ -4,6 +4,8 @@ import { useCallback, useState } from "react";
 import type { BookingType } from "@/lib/bookings";
 
 export type PaymentInput = {
+  /** Paying fighter's profile id — server applies XP/session rewards to it. */
+  fighterId?: string;
   trainerId: number;
   trainerName: string;
   gymName: string;

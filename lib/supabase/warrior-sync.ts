@@ -99,74 +99,37 @@ function clearSyncedSessions(syncedIds: Set<string>): void {
   saveQueue(queue);
 }
 
-// ── Resilient Supabase helpers ─────────────────────────────────────────────────
+// ── Server session API ─────────────────────────────────────────────────────────
 
 /**
- * Resilient upsert for `fighter_stats`.
- * Strips unknown columns one-by-one and retries up to 8 times.
+ * Persist one session through the server route (`/api/session/complete`).
+ * XP and settlement are recomputed server-side (service role), so the anon
+ * key never writes `training_sessions` / `fighter_stats` directly.
  */
-async function upsertFighterStats(
-  client: SupabaseClient,
-  stats: Record<string, unknown>,
-): Promise<{ error: Error | null }> {
-  let payload = { ...stats };
+async function postSessionToServer(opts: {
+  fighterId: string;
+  grossRub: number;
+  sessionType?: string;
+  createdAt?: string;
+}): Promise<{ error: Error | null }> {
+  try {
+    const res = await fetch("/api/session/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(opts),
+    });
 
-  for (let attempt = 0; attempt < 8; attempt++) {
-    const { error } = await client
-      .from("fighter_stats")
-      .upsert(payload, { onConflict: "fighter_id" });
+    if (res.ok) return { error: null };
 
-    if (!error) return { error: null };
-
-    const miss = error.message.match(/Could not find the '([^']+)' column/);
-    if (miss) {
-      const col = miss[1];
-      if (col in payload) {
-        const { [col]: _dropped, ...rest } = payload;
-        payload = rest;
-        continue;
-      }
-    }
-
-    return { error: new Error(error.message) };
+    const data = (await res.json().catch(() => null)) as { message?: string } | null;
+    return {
+      error: new Error(data?.message ?? `Session sync failed (${res.status})`),
+    };
+  } catch (err) {
+    return {
+      error: err instanceof Error ? err : new Error("Session sync network error"),
+    };
   }
-
-  return { error: new Error("Too many missing columns in fighter_stats — run migration 0001+") };
-}
-
-/**
- * Resilient insert for `training_sessions`.
- * Strips unknown columns one-by-one and retries up to 12 times.
- */
-async function insertTrainingSession(
-  client: SupabaseClient,
-  row: Record<string, unknown>,
-): Promise<{ error: Error | null }> {
-  let payload = { ...row };
-
-  for (let attempt = 0; attempt < 12; attempt++) {
-    const { error } = await client.from("training_sessions").insert(payload);
-
-    if (!error) return { error: null };
-
-    const miss = error.message.match(/Could not find the '([^']+)' column/);
-    if (miss) {
-      const col = miss[1];
-      if (col in payload) {
-        const { [col]: _dropped, ...rest } = payload;
-        payload = rest;
-        continue;
-      }
-    }
-
-    return { error: new Error(error.message) };
-  }
-
-  return {
-    error: new Error(
-      "Too many missing columns in training_sessions. Run migration 0001.",
-    ),
-  };
 }
 
 // ── Offline queue flush ────────────────────────────────────────────────────────
@@ -179,15 +142,15 @@ export type FlushResult = {
 };
 
 /**
- * Flush all pending offline sessions to Supabase.
+ * Flush all pending offline sessions through the server session route.
  *
  * Strategy:
  *   1. Load queue from localStorage.
- *   2. For each entry: INSERT into training_sessions + UPSERT fighter_stats.
+ *   2. POST each entry to /api/session/complete (server recomputes XP).
  *   3. Track successes; remove them from the queue.
  *   4. Leave failed entries in the queue for the next flush attempt.
  */
-export async function flushOfflineQueue(client: SupabaseClient): Promise<FlushResult> {
+export async function flushOfflineQueue(_client?: SupabaseClient | null): Promise<FlushResult> {
   const queue = loadQueue();
   if (!queue.length) return { flushed: 0, failed: 0, remaining: 0, errors: [] };
 
@@ -195,44 +158,17 @@ export async function flushOfflineQueue(client: SupabaseClient): Promise<FlushRe
   const errors: Error[] = [];
 
   for (const entry of queue) {
-    // Build session row (strip internal queue fields)
-    const sessionRow: Record<string, unknown> = {
-      fighter_id: entry.fighter_id,
-      gross_amount: entry.gross_amount,
-      commission_pct: entry.commission_pct,
-      commission: entry.commission,
-      fee_amount: entry.fee_amount,
-      net_amount: entry.net_amount,
-      xp_awarded: entry.xp_awarded,
-      level_before: entry.level_before,
-      level_after: entry.level_after,
-      total_xp_after: entry.total_xp_after,
-      levels_gained: entry.levels_gained,
-      currency: entry.currency,
+    const { error } = await postSessionToServer({
+      fighterId: entry.fighter_id,
+      grossRub: entry.gross_amount,
+      sessionType: "offline_sync",
       // Preserve the original queue timestamp as created_at so ordering is correct
-      created_at: entry.queuedAt,
-    };
+      createdAt: entry.queuedAt,
+    });
 
-    const { error: sessErr } = await insertTrainingSession(client, sessionRow);
-    if (sessErr) {
-      errors.push(new Error(`[${entry.queueId}] session insert: ${sessErr.message}`));
+    if (error) {
+      errors.push(new Error(`[${entry.queueId}] session sync: ${error.message}`));
       continue;
-    }
-
-    // Update fighter stats after each successful insert
-    const statsRow: Record<string, unknown> = {
-      fighter_id: entry.fighter_id,
-      total_xp: entry.total_xp_after,
-      current_level: entry.level_after,
-      monthly_xp: entry.monthly_xp_after,
-      updated_at: new Date().toISOString(),
-    };
-
-    const { error: statsErr } = await upsertFighterStats(client, statsRow);
-    if (statsErr) {
-      // Stats upsert failed — session already inserted, mark as synced anyway
-      // to avoid duplicate inserts on next flush; log the stats error.
-      console.warn("[Warrior Point] offline flush: stats upsert failed", statsErr.message);
     }
 
     synced.add(entry.queueId);
@@ -254,20 +190,21 @@ export async function flushOfflineQueue(client: SupabaseClient): Promise<FlushRe
 /**
  * Persist a warrior training session.
  *
- * Online path:   INSERT training_sessions + UPSERT fighter_stats directly.
+ * Online path:   POST /api/session/complete — server recomputes XP/settlement
+ *                and writes with the service-role client.
  * Offline path:  Enqueue to localStorage; returns { status: "saved_offline" }.
  *
  * The offline queue is flushed automatically by `useOfflineSync` hook
  * when network connectivity is restored.
  */
 export async function persistWarriorTrainingSession(
-  client: SupabaseClient,
+  _client: SupabaseClient | null,
   payload: WarriorTrainingSyncPayload,
 ): Promise<SyncResult> {
   const { fighterId, economics, advancement, monthlyXpAfter } = payload;
   const breakdown: SettlementBreakdown = economics.breakdown;
 
-  // ── Build canonical session row ────────────────────────────────────────────
+  // ── Build canonical session row (offline queue format) ─────────────────────
   const sessionBase = {
     fighter_id: fighterId,
     gross_amount: breakdown.gross,
@@ -296,29 +233,21 @@ export async function persistWarriorTrainingSession(
     return { status: "saved_offline", pendingCount };
   }
 
-  // ── Online: persist immediately ────────────────────────────────────────────
-
-  // 1. Upsert fighter stats
-  const statsRow: Record<string, unknown> = {
-    fighter_id: fighterId,
-    total_xp: advancement.totalXpAfter,
-    current_level: advancement.levelAfter,
-    updated_at: new Date().toISOString(),
-  };
-  if (monthlyXpAfter !== undefined) {
-    statsRow.monthly_xp = monthlyXpAfter;
-  }
-
-  const { error: statsErr } = await upsertFighterStats(client, statsRow);
-  if (statsErr) return { status: "error", error: statsErr };
-
-  // 2. Insert session line
-  const { error: sessErr } = await insertTrainingSession(client, {
-    ...sessionBase,
-    // Don't send monthly_xp_after to training_sessions — it's a stats-level field
-    monthly_xp_after: undefined,
+  // ── Online: persist through the server route ────────────────────────────────
+  const { error } = await postSessionToServer({
+    fighterId,
+    grossRub: breakdown.gross,
+    sessionType: "training",
   });
-  if (sessErr) return { status: "error", error: sessErr };
+
+  if (error) {
+    // Network hiccup mid-request — keep the session in the offline queue.
+    const pendingCount = enqueueOfflineSession(sessionBase);
+    console.warn(
+      `[Warrior Point] session sync failed (${error.message}) — queued (${pendingCount} pending)`,
+    );
+    return { status: "saved_offline", pendingCount };
+  }
 
   return { status: "synced" };
 }

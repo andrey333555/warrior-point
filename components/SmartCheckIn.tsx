@@ -1,18 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { applyCheckInRewards } from "@/lib/check-in-rewards";
 import {
-  CODE_ROTATION_MS,
-  generateTrainerCode,
   isInGymZone,
   KRASNODAR_GYMS,
   resolveTrainerCheckInSite,
   smartVerify,
-  verifyTrainerCode,
   type GymLocation,
   type VerifyResult,
 } from "@/lib/verify";
+import {
+  fetchTrainerCodeSession,
+  verifyCheckInCode,
+} from "@/lib/checkin-client";
 
 type SmartCheckInProps = {
   trainerId: string;
@@ -48,7 +48,6 @@ export default function SmartCheckIn({
   const finalize = (result: VerifyResult, dist = distance) => {
     if (!result.verified || rewardedRef.current) return;
     rewardedRef.current = true;
-    applyCheckInRewards(site.current, dist, result);
     setVerified(result);
     onVerifiedRef.current(result);
   };
@@ -100,13 +99,13 @@ export default function SmartCheckIn({
     );
   }, [trainerId]);
 
-  const handleCodeSubmit = () => {
-    const valid = verifyTrainerCode(trainerId, code);
-    if (valid) {
+  const handleCodeSubmit = async () => {
+    const check = await verifyCheckInCode(trainerId, code);
+    if (check.valid) {
       const result: VerifyResult = {
         verified: true,
         method: "code",
-        confidence: "high",
+        confidence: check.source === "server" ? "high" : "medium",
         timestamp: new Date().toISOString(),
         details: "🔢 Подтверждено кодом тренера",
       };
@@ -429,18 +428,25 @@ export default function SmartCheckIn({
 export function TrainerCodeDisplay({ trainerId }: { trainerId: string }) {
   const [code, setCode] = useState("");
   const [timeLeft, setTimeLeft] = useState(0);
+  const [source, setSource] = useState<"server" | "local">("local");
 
   useEffect(() => {
-    const update = () => {
-      setCode(generateTrainerCode(trainerId));
-      const now = Date.now();
-      const slotEnd =
-        Math.ceil(now / CODE_ROTATION_MS) * CODE_ROTATION_MS;
-      setTimeLeft(Math.round((slotEnd - now) / 1000 / 60));
+    let cancelled = false;
+
+    const update = async () => {
+      const session = await fetchTrainerCodeSession(trainerId);
+      if (cancelled) return;
+      setCode(session.displayCode.replace(/\s/g, ""));
+      setSource(session.source);
+      setTimeLeft(Math.max(1, Math.ceil(session.expiresInMs / 1000 / 60)));
     };
-    update();
-    const interval = setInterval(update, 10_000);
-    return () => clearInterval(interval);
+
+    void update();
+    const interval = setInterval(() => void update(), 10_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [trainerId]);
 
   return (
@@ -473,7 +479,7 @@ export function TrainerCodeDisplay({ trainerId }: { trainerId: string }) {
         Обновится через {timeLeft} мин
       </p>
       <p className="mt-1 text-xs text-white/20">
-        Назови код клиенту после тренировки
+        {source === "server" ? "Серверный код · защищён" : "Демо-код · для разработки"}
       </p>
     </div>
   );

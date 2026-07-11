@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
+import { useBackOrHome } from "@/hooks/use-back-or-home";
 import { matchTrainer, type Format, type Goal, type Level, type MatchResult } from "@/lib/ai-match";
 import { DEFAULT_TRAINER_IMAGE } from "@/lib/network";
 import { createGoalFromAi } from "@/lib/goals";
@@ -303,12 +304,13 @@ export default function AiMatchPage() {
     }
   };
 
+  const backOrHome = useBackOrHome("/");
   const goBack = () => {
     if (step > 0) {
       setDir(-1);
       setStep((s) => s - 1);
     } else {
-      router.back();
+      backOrHome();
     }
   };
 

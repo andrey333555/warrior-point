@@ -1,10 +1,11 @@
 "use client";
 
+import { Suspense } from "react";
 import { useWarriorAuth, deactivateGuestMode } from "@/hooks/use-warrior-auth";
 import { AuthGate } from "@/components/auth-gate";
 import { TacticalOS } from "@/components/tactical-os";
 
-export default function Home() {
+function HomeShell() {
   const auth = useWarriorAuth();
 
   if (auth.status === "loading") {
@@ -43,5 +44,13 @@ export default function Home() {
 
       <TacticalOS fighterId={auth.user.id} />
     </>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={null}>
+      <HomeShell />
+    </Suspense>
   );
 }

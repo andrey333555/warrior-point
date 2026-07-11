@@ -21,6 +21,10 @@ import {
   offlinePendingCount,
   type FlushResult,
 } from "@/lib/supabase/warrior-sync";
+import {
+  syncConfirmedFixations,
+  fixationAwaitingCount,
+} from "@/lib/fixation-sync";
 
 // Re-export for consumers who only import from the hook
 export type { FlushResult };
@@ -40,6 +44,7 @@ export type OfflineSyncState = {
 
 export function useOfflineSync(
   client: SupabaseClient | null,
+  fighterId?: string,
 ): OfflineSyncState {
   const [pendingCount, setPendingCount] = useState<number>(0);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -58,7 +63,8 @@ export function useOfflineSync(
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
 
     const pending = offlinePendingCount();
-    if (pending === 0) return;
+    const fixationPending = fighterId ? fixationAwaitingCount(fighterId) : 0;
+    if (pending === 0 && fixationPending === 0) return;
 
     syncingRef.current = true;
     setIsSyncing(true);
@@ -66,8 +72,20 @@ export function useOfflineSync(
     try {
       const result = await flushOfflineQueue(client);
 
+      if (fighterId) {
+        const fixationResult = await syncConfirmedFixations(client, fighterId);
+        if (fixationResult.synced > 0) {
+          console.info(
+            `[Warrior Point] fixation sync: ${fixationResult.synced} session(s)`,
+          );
+        }
+        if (fixationResult.errors.length > 0) {
+          console.warn("[Warrior Point] fixation sync errors:", fixationResult.errors);
+        }
+      }
+
       setLastResult(result);
-      setPendingCount(result.remaining);
+      setPendingCount(result.remaining + (fighterId ? fixationAwaitingCount(fighterId) : 0));
 
       if (result.flushed > 0) {
         setLastSyncAt(new Date().toISOString());
@@ -89,7 +107,7 @@ export function useOfflineSync(
       syncingRef.current = false;
       setIsSyncing(false);
     }
-  }, [client]);
+  }, [client, fighterId]);
 
   // Stable ref so event listeners always call the latest flush
   const flushRef = useRef(flush);
@@ -98,8 +116,10 @@ export function useOfflineSync(
   // ── Initialise pending count on mount ──────────────────────────────────────
 
   useEffect(() => {
-    setPendingCount(offlinePendingCount());
-  }, []);
+    setPendingCount(
+      offlinePendingCount() + (fighterId ? fixationAwaitingCount(fighterId) : 0),
+    );
+  }, [fighterId]);
 
   // ── Listen for online/offline events ──────────────────────────────────────
 
@@ -107,18 +127,18 @@ export function useOfflineSync(
     if (!client) return;
 
     function onOnline() {
-      // Short delay so the network stack stabilises before we hit Supabase
-      const tid = window.setTimeout(() => {
-        setPendingCount(offlinePendingCount());
+      window.setTimeout(() => {
+        setPendingCount(
+          offlinePendingCount() + (fighterId ? fixationAwaitingCount(fighterId) : 0),
+        );
         void flushRef.current();
       }, 1200);
-
-      return () => window.clearTimeout(tid);
     }
 
     function onOffline() {
-      // Update count so UI can show the pending badge immediately
-      setPendingCount(offlinePendingCount());
+      setPendingCount(
+        offlinePendingCount() + (fighterId ? fixationAwaitingCount(fighterId) : 0),
+      );
     }
 
     window.addEventListener("online", onOnline);
@@ -128,7 +148,7 @@ export function useOfflineSync(
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
     };
-  }, [client]);
+  }, [client, fighterId]);
 
   // ── Attempt initial flush on mount (catch previous-session leftovers) ─────
 
@@ -139,7 +159,7 @@ export function useOfflineSync(
       const tid = window.setTimeout(() => void flushRef.current(), 2500);
       return () => window.clearTimeout(tid);
     }
-  }, [client]);
+  }, [client, fighterId]);
 
   return {
     pendingCount,

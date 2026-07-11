@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { createFightPayment } from "@/lib/payments/create-intent";
+import { validateGrossRub } from "@/lib/payments/validate-price";
 import type { BookingType } from "@/lib/bookings";
 
 type Body = {
+  fighterId?: string;
   trainerId?: number;
   trainerName?: string;
   gymName?: string;
@@ -39,17 +41,31 @@ export async function POST(req: Request) {
     );
   }
 
+  const priceCheck = validateGrossRub(trainerId, body.grossRub);
+  if (!priceCheck.ok) {
+    return NextResponse.json(
+      { ok: false, message: priceCheck.message },
+      { status: 400 },
+    );
+  }
+
   const trainingType = isBookingType(body.trainingType) ? body.trainingType : "split";
   const origin = new URL(req.url).origin;
 
+  const fighterId =
+    typeof body.fighterId === "string" && body.fighterId.trim().length <= 128
+      ? body.fighterId.trim()
+      : undefined;
+
   const result = await createFightPayment({
+    fighterId,
     trainerId,
     trainerName: body.trainerName,
     gymName: body.gymName,
     date: body.date,
     time: body.time,
     trainingType,
-    grossRub: body.grossRub,
+    grossRub: priceCheck.grossRub,
     origin,
   });
 

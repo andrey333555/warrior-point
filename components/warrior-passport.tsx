@@ -260,7 +260,7 @@ export function WarriorPassport({ fighterId }: { fighterId: string }) {
     async (amount: number, comment: string) => {
       setDonateBusy(true);
       setDonateError(null);
-      const result = await submitFighterDonation(createWarriorBrowserClient(), {
+      const result = await submitFighterDonation({
         recipientId: fighterId,
         grossRub: amount,
         comment,

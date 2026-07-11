@@ -7,18 +7,27 @@ import { fighters, getGymName, findTrainer, findGym, type Fighter } from "@/lib/
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useDonateUi } from "@/hooks/use-donate-ui";
+import { getCalibration } from "@/lib/calibration-store";
+import { DEMO_FIGHTER_DB_ID, DEMO_FIGHTER_DISPLAY_NAME } from "@/lib/warrior-constants";
 
 function cloneFighters() {
   return fighters.map((f) => ({ ...f }));
 }
 
-/** Current warrior profile — demo passport (Cobra). */
-const CURRENT_USER = {
-  name: "Cobra",
-  elo: 1820,
-  round: 13,
+type CurrentUser = {
+  name: string;
+  elo: number;
+  round: number;
+  wins: number;
+};
+
+/** Fallback demo passport when calibration hasn't been set yet. */
+const DEFAULT_CURRENT_USER: CurrentUser = {
+  name: DEMO_FIGHTER_DISPLAY_NAME,
+  elo: 1642,
+  round: 12,
   wins: 27,
-} as const;
+};
 
 function parseWins(record: string): number {
   const parts = record.split("-").map((p) => Number.parseInt(p, 10));
@@ -27,6 +36,18 @@ function parseWins(record: string): number {
 
 function eloToRound(elo: number): number {
   return Math.min(23, Math.max(1, Math.round(elo / 140)));
+}
+
+/** Read the viewer's real passport (calibration) for the compare drawer. */
+function resolveCurrentUser(): CurrentUser {
+  const calibration = getCalibration(DEMO_FIGHTER_DB_ID);
+  if (!calibration) return DEFAULT_CURRENT_USER;
+  return {
+    name: DEMO_FIGHTER_DISPLAY_NAME,
+    elo: calibration.startingElo,
+    round: eloToRound(calibration.startingElo),
+    wins: calibration.record.wins,
+  };
 }
 
 function formatDelta(value: number, suffix = ""): string {
@@ -95,13 +116,14 @@ function CompareDrawer({
   const trainer = findTrainer(fighter.trainerId);
   const gym = findGym(fighter.gyms[0] ?? 0);
   const [mounted, setMounted] = useState(false);
+  const [currentUser, setCurrentUser] = useState<CurrentUser>(DEFAULT_CURRENT_USER);
 
   const fighterWins = parseWins(fighter.record);
   const fighterRound = eloToRound(fighter.elo);
 
-  const eloDelta = fighter.elo - CURRENT_USER.elo;
-  const roundDelta = fighterRound - CURRENT_USER.round;
-  const winsDelta = fighterWins - CURRENT_USER.wins;
+  const eloDelta = fighter.elo - currentUser.elo;
+  const roundDelta = fighterRound - currentUser.round;
+  const winsDelta = fighterWins - currentUser.wins;
 
   const motivation =
     roundDelta > 0
@@ -114,6 +136,7 @@ function CompareDrawer({
 
   useEffect(() => {
     setMounted(true);
+    setCurrentUser(resolveCurrentUser());
   }, []);
 
   if (!mounted) return null;
@@ -147,7 +170,7 @@ function CompareDrawer({
               Ты
             </p>
             <p className="mt-1 truncate font-[family-name:var(--font-geist-sans)] text-base font-bold text-cyan-100">
-              {CURRENT_USER.name}
+              {currentUser.name}
             </p>
           </div>
           <div className="rounded-2xl border border-zinc-700 bg-zinc-900 px-3 py-2.5">
@@ -163,21 +186,21 @@ function CompareDrawer({
         <div className="mt-4 divide-y divide-zinc-800 rounded-2xl border border-zinc-800 bg-zinc-900/80 px-4">
           <StatColumn
             label="ELO"
-            you={CURRENT_USER.elo}
+            you={currentUser.elo}
             them={fighter.elo}
             delta={eloDelta}
             highlight={eloDelta > 0 ? "behind" : eloDelta < 0 ? "ahead" : "neutral"}
           />
           <StatColumn
             label="Раунд"
-            you={CURRENT_USER.round}
+            you={currentUser.round}
             them={fighterRound}
             delta={roundDelta}
             highlight={roundDelta > 0 ? "behind" : roundDelta < 0 ? "ahead" : "neutral"}
           />
           <StatColumn
             label="Побед"
-            you={CURRENT_USER.wins}
+            you={currentUser.wins}
             them={fighterWins}
             delta={winsDelta}
             highlight={winsDelta > 0 ? "behind" : winsDelta < 0 ? "ahead" : "neutral"}

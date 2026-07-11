@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const intent = getPaymentIntent(paymentId);
+  const intent = await getPaymentIntent(paymentId);
   if (!intent) {
     return NextResponse.json(
       { ok: false, message: "Платёж не найден" },

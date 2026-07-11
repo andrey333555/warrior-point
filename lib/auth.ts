@@ -3,6 +3,7 @@ import type { OAuthConfig } from "next-auth/providers/oauth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import AppleProvider from "next-auth/providers/apple";
+import { verifyTelegramInitData } from "@/lib/telegram-verify";
 
 type YandexProfile = {
   id: string;
@@ -118,6 +119,14 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         const initData = credentials?.initData;
         if (!initData) return null;
+
+        // HMAC check per Telegram Mini App spec — without it anyone could
+        // craft initData and log in as an arbitrary Telegram user.
+        const verification = verifyTelegramInitData(initData);
+        if (!verification.ok) {
+          console.warn(`[auth] telegram initData rejected: ${verification.reason}`);
+          return null;
+        }
 
         const params = new URLSearchParams(initData);
         const userJson = params.get("user");

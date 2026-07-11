@@ -35,6 +35,7 @@ export async function createFightPayment(
   const intent: PaymentIntent = {
     id: paymentId,
     status: "pending",
+    fighterId: input.fighterId,
     trainerId: input.trainerId,
     trainerName: input.trainerName,
     gymName: input.gymName,
@@ -47,7 +48,7 @@ export async function createFightPayment(
     createdAt: new Date().toISOString(),
   };
 
-  savePaymentIntent(intent);
+  await savePaymentIntent(intent);
 
   const description = `Round 23 · ${input.trainingType} · ${input.trainerName}`;
   const metadata = {
@@ -70,7 +71,7 @@ export async function createFightPayment(
       }
 
       intent.yookassaId = yk.yookassaId;
-      savePaymentIntent(intent);
+      await savePaymentIntent(intent);
 
       return {
         ok: true,

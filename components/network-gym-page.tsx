@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
+import { useBackOrHome } from "@/hooks/use-back-or-home";
 import { Button } from "@/components/ui/button";
 import { TrainerFitsYouBlock } from "@/components/trainer-fits-you-block";
 import {
@@ -132,6 +133,7 @@ function GymRecommendations({ gym }: { gym: Gym }) {
 
 export default function NetworkGymPage({ gym }: { gym: Gym }) {
   const router = useRouter();
+  const goBack = useBackOrHome("/map");
   const gymTrainers = getTrainersForGym(gym.id);
   const gymFighters = getFightersForGym(gym.id);
   const location = gym.locationHint ?? gym.address;
@@ -141,7 +143,7 @@ export default function NetworkGymPage({ gym }: { gym: Gym }) {
       <header className="absolute left-0 right-0 top-0 z-20 px-4 py-3">
         <button
           type="button"
-          onClick={() => router.back()}
+          onClick={goBack}
           className="rounded-full border border-white/10 bg-black/50 px-2.5 py-1 text-[9px] uppercase tracking-[0.16em] text-neutral-400 backdrop-blur-md"
         >
           ← Назад

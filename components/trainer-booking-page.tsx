@@ -2,14 +2,19 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { useRouter } from "next/navigation";
-import { getGymsForTrainer, type Gym, type Trainer } from "@/lib/network";
+import { getGymsForTrainer, type Gym, type Trainer, type TrainingType } from "@/lib/network";
+import { inferBookingType } from "@/lib/bookings";
 import { usePayment } from "@/lib/usePayment";
 import { splitSettlement } from "@/lib/economy";
 import { Button } from "@/components/ui/button";
 import { ErrorMessage } from "@/components/ui/error-message";
 import InsuranceBlock from "@/components/InsuranceBlock";
+import SessionFixationCard from "@/components/SessionFixationCard";
+import AiPriceAdvisor from "@/components/AiPriceAdvisor";
 import { type InsurancePlan } from "@/lib/insurance";
+import { useWarriorAuth } from "@/hooks/use-warrior-auth";
+import { useBackOrHome } from "@/hooks/use-back-or-home";
+import { DEMO_FIGHTER_DB_ID } from "@/lib/warrior-constants";
 
 type TrainerBookingPageProps = {
   trainer: Trainer;
@@ -24,13 +29,6 @@ const DATES = [
 
 const SLOTS = ["10:00", "12:00", "18:00", "20:00"] as const;
 
-const TRAINING_TYPES = [
-  { id: "individual", label: "Индивидуальная", hint: "1-на-1 с тренером", price: 3000 },
-  { id: "group", label: "Группа", hint: "до 8 человек", price: 1000 },
-  { id: "split", label: "Сплит", hint: "целевая программа", price: 2000 },
-] as const;
-
-type TrainingTypeId = (typeof TRAINING_TYPES)[number]["id"];
 type Screen = "booking" | "payment";
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -47,13 +45,18 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps) {
-  const router = useRouter();
+  const goBack = useBackOrHome(`/trainer/${trainer.id}`);
+  const auth = useWarriorAuth();
+  const fighterId =
+    auth.status === "authenticated" ? auth.user.id : DEMO_FIGHTER_DB_ID;
   const trainerGyms = getGymsForTrainer(trainer.id);
 
   const [selectedGym, setSelectedGym] = useState<Gym | undefined>(trainerGyms[0]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
-  const [trainingType, setTrainingType] = useState<TrainingTypeId>("split");
+  const [selectedTraining, setSelectedTraining] = useState<TrainingType>(
+    trainer.trainings[0]!,
+  );
   const [screen, setScreen] = useState<Screen>("booking");
   const [insurance, setInsurance] = useState<InsurancePlan | null>(null);
   const { paying, error: paymentError, pay, clearError } = usePayment();
@@ -61,21 +64,21 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
   const canProceed = !!selectedGym && !!selectedDate && !!selectedTime;
 
   const dateLabel = DATES.find((d) => d.id === selectedDate)?.label ?? "—";
-  const typeData = TRAINING_TYPES.find((t) => t.id === trainingType)!;
-  const splitPrice = typeData.price;
-  const total = splitPrice + (insurance?.price ?? 0);
-  const settlement = splitSettlement(splitPrice);
+  const trainingPrice = selectedTraining.price;
+  const total = trainingPrice + (insurance?.price ?? 0);
+  const settlement = splitSettlement(trainingPrice);
 
   const handlePay = async () => {
     if (paying || !selectedGym || !selectedTime) return;
 
     await pay({
+      fighterId,
       trainerId: trainer.id,
       trainerName: trainer.name,
       gymName: selectedGym.name,
       date: dateLabel,
       time: selectedTime,
-      trainingType,
+      trainingType: inferBookingType(selectedTraining.name),
       grossRub: total,
     });
   };
@@ -103,13 +106,30 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
-          className="mt-8 space-y-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-5"
+          className="mt-6"
+        >
+          <AiPriceAdvisor
+            fighterId={fighterId}
+            gym={selectedGym}
+            trainerPrice={trainingPrice}
+          />
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.08 }}
+          className="mt-6 space-y-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-5"
         >
           <Row label="Тренер" value={trainer.name} />
           <Row label="Зал" value={selectedGym?.name ?? "—"} />
           <Row label="Дата" value={dateLabel} />
           <Row label="Время" value={selectedTime ?? "—"} />
-          <Row label="Тип" value={typeData.label} />
+          <Row label="Тип" value={selectedTraining.name} />
+          <Row
+            label="Цена тренера"
+            value={`${trainingPrice.toLocaleString("ru-RU")}₽`}
+          />
         </motion.div>
 
         <motion.div
@@ -134,7 +154,7 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
             </span>
           </p>
           <p className="mt-2 text-sm text-gray-400">
-            Тренировка: {splitPrice.toLocaleString("ru-RU")}₽
+            Тренировка: {trainingPrice.toLocaleString("ru-RU")}₽
           </p>
           <p className="mt-1 text-sm text-gray-400">
             Страховка: {insurance ? `${insurance.price}₽` : "—"}
@@ -152,11 +172,27 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
             {total.toLocaleString("ru-RU")}₽
           </p>
           <p className="mt-2 text-xs text-gray-500">
-            {typeData.label} · комиссия 19% ({settlement.commission}₽) · тренеру {settlement.net}₽
+            {selectedTraining.name} · {selectedTraining.duration} · комиссия 19% ({settlement.commission}₽) · тренеру {settlement.net}₽
           </p>
         </motion.div>
 
-        <div className="mt-auto space-y-3 pt-8">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.18, type: "spring", stiffness: 260, damping: 24 }}
+          className="mt-6"
+        >
+          <SessionFixationCard
+            embedded
+            fighterId={fighterId}
+            trainerId={String(trainer.id)}
+            trainerName={trainer.name}
+            gymId={String(selectedGym?.id ?? trainer.gyms[0] ?? 1)}
+            gymName={selectedGym?.name ?? "Зал"}
+          />
+        </motion.div>
+
+        <div className="mt-auto space-y-3 pt-6">
           {paymentError ? (
             <ErrorMessage message={paymentError} onRetry={clearError} />
           ) : null}
@@ -183,7 +219,7 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
       <header className="px-4 py-3">
         <button
           type="button"
-          onClick={() => router.back()}
+          onClick={goBack}
           className="rounded-full border border-white/10 bg-black/50 px-2.5 py-1 text-[9px] uppercase tracking-[0.16em] text-neutral-400"
         >
           ← Назад
@@ -198,6 +234,14 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
         {selectedGym ? (
           <p className="mt-1 text-sm text-gray-400">{selectedGym.name}</p>
         ) : null}
+
+        <div className="mt-4">
+          <AiPriceAdvisor
+            fighterId={fighterId}
+            gym={selectedGym}
+            trainerPrice={trainingPrice}
+          />
+        </div>
       </div>
 
       {trainerGyms.length > 1 ? (
@@ -268,15 +312,15 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
       </div>
 
       <div className="mt-7 px-4">
-        <SectionLabel>Тип тренировки</SectionLabel>
+        <SectionLabel>Тренировки тренера</SectionLabel>
         <div className="space-y-2">
-          {TRAINING_TYPES.map((tt) => {
-            const active = trainingType === tt.id;
+          {trainer.trainings.map((tt) => {
+            const active = selectedTraining.id === tt.id;
             return (
               <button
                 key={tt.id}
                 type="button"
-                onClick={() => setTrainingType(tt.id)}
+                onClick={() => setSelectedTraining(tt)}
                 className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3.5 text-left transition-colors ${
                   active
                     ? "border-yellow-400 bg-yellow-400/10"
@@ -284,12 +328,15 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
                 }`}
               >
                 <div>
-                  <p className="font-semibold text-white">{tt.label}</p>
-                  <p className="text-xs text-gray-500">{tt.hint}</p>
+                  <p className="font-semibold text-white">{tt.name}</p>
+                  <p className="text-xs text-gray-500">{tt.duration}</p>
                 </div>
-                <span className="font-[family-name:var(--font-jetbrains-mono)] text-sm font-semibold text-yellow-400">
-                  {tt.price.toLocaleString("ru-RU")}₽
-                </span>
+                <div className="text-right">
+                  <span className="font-[family-name:var(--font-jetbrains-mono)] text-sm font-semibold text-yellow-400">
+                    {tt.price.toLocaleString("ru-RU")}₽
+                  </span>
+                  <p className="text-[10px] text-zinc-500">цена тренера</p>
+                </div>
               </button>
             );
           })}
@@ -307,7 +354,7 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
             </span>
           </p>
           <p className="mt-2 text-sm text-gray-400">
-            Тренировка: {splitPrice.toLocaleString("ru-RU")}₽
+            Тренировка: {trainingPrice.toLocaleString("ru-RU")}₽
           </p>
           <p className="mt-1 text-sm text-gray-400">
             Страховка: {insurance ? `${insurance.price}₽` : "—"}

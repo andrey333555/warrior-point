@@ -14,6 +14,7 @@ import {
 } from "@/lib/network";
 import { useReviewsForTrainer, type UserReview } from "@/lib/reviews";
 import { SupportModal } from "@/components/support-modal";
+import { TrainerFavoriteButton } from "@/components/trainer-favorite-button";
 import { useSubscription } from "@/lib/subscriptions";
 import { Button } from "@/components/ui/button";
 
@@ -63,7 +64,10 @@ function TrainerHero({ trainer }: { trainer: Trainer }) {
 
   if (useFallback) {
     return (
-      <div className="border-b border-white/[0.06] px-4 pb-5 pt-6">
+      <div className="relative border-b border-white/[0.06] px-4 pb-5 pt-6">
+        <div className="absolute right-4 top-4 z-10">
+          <TrainerFavoriteButton trainerId={trainer.id} />
+        </div>
         <motion.div
           initial={{ opacity: 0, scale: 0.92 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -88,6 +92,9 @@ function TrainerHero({ trainer }: { trainer: Trainer }) {
 
   return (
     <div className="relative h-[200px] overflow-hidden bg-zinc-950">
+      <div className="absolute right-4 top-4 z-20">
+        <TrainerFavoriteButton trainerId={trainer.id} />
+      </div>
       <motion.div
         initial={{ opacity: 0, scale: 1.06 }}
         animate={imageLoaded ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 1.06 }}

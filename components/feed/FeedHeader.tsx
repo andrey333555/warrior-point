@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 
 function HexLogo() {
@@ -56,6 +58,16 @@ export function FeedHeader({
   onNotificationsClick,
 }: FeedHeaderProps) {
   const router = useRouter();
+  const [notice, setNotice] = useState(false);
+
+  const handleNotifications = () => {
+    if (onNotificationsClick) {
+      onNotificationsClick();
+      return;
+    }
+    setNotice(true);
+    window.setTimeout(() => setNotice(false), 2600);
+  };
 
   return (
     <header className="sticky top-0 z-50 flex shrink-0 items-center justify-between border-b border-white/10 bg-black/40 px-4 py-3 backdrop-blur-xl">
@@ -80,14 +92,28 @@ export function FeedHeader({
         >
           ⚡ Стать выше
         </button>
-        <button
-          type="button"
-          onClick={onNotificationsClick}
-          aria-label="Уведомления"
-          className="rounded-full text-white/50 transition-colors hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-400/50"
-        >
-          <BellIcon />
-        </button>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={handleNotifications}
+            aria-label="Уведомления"
+            className="rounded-full text-white/50 transition-colors hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-400/50"
+          >
+            <BellIcon />
+          </button>
+          <AnimatePresence>
+            {notice ? (
+              <motion.div
+                initial={{ opacity: 0, y: -6, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.95 }}
+                className="absolute right-0 top-9 z-50 w-48 rounded-xl border border-white/10 bg-zinc-900/95 px-3 py-2 text-right text-[11px] text-neutral-300 shadow-[0_8px_32px_-8px_rgba(0,0,0,0.8)] backdrop-blur-xl"
+              >
+                Пока нет новых уведомлений
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
+        </div>
         <button
           type="button"
           onClick={onProfileClick}

@@ -16,7 +16,7 @@ export default function Player({ video, onClose }: PlayerProps) {
 
   if (mini) {
     return (
-      <div className="fixed bottom-4 left-4 right-4 z-50 flex items-center justify-between rounded-xl bg-black/70 px-4 py-3 backdrop-blur-xl transition-all duration-300 ease-out">
+      <div className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] left-4 right-4 z-[120] mx-auto flex max-w-[388px] items-center justify-between rounded-xl border border-white/10 bg-black/80 px-4 py-3 backdrop-blur-xl transition-all duration-300 ease-out">
         <button
           type="button"
           onClick={() => setMini(false)}

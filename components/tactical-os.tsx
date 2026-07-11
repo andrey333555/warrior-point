@@ -3,8 +3,8 @@
 /**
  * TacticalOS — monolithic No-Scroll shell for Warrior Point.
  *
- * Vertical stack: Header (logo · search · avatar) → Category tabs → Main feed → Floating player.
- * Categories: Лента (cards) · Паспорт · Топ. Map remains a dedicated route.
+ * Vertical stack: Header → Main feed → HubNav (глобально в layout).
+ * Разделы: Лента · Паспорт · Топ через ?tab= · Карты на /map.
  *
  * All Supabase connection interfaces are preserved:
  *   - createWarriorBrowserClient()  (memoised browser client)
@@ -12,9 +12,9 @@
  *   - fetchWarriorProfile()         (display name / role)
  */
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useDonateUi } from "@/hooks/use-donate-ui";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useOfflineSync } from "@/hooks/use-offline-sync";
 import { AnimatePresence, motion } from "framer-motion";
 import { useWarriorAuth } from "@/hooks/use-warrior-auth";
 import { createWarriorBrowserClient } from "@/lib/supabase/client";
@@ -43,16 +43,23 @@ import { FeedStream } from "@/components/feed/FeedStream";
 import type { FeedCategory } from "@/components/feed/types";
 import type { Video } from "@/lib/data";
 import { deriveInitials } from "@/lib/supabase/provision-user";
+import {
+  buildCalibration,
+  formatRecord,
+  getSkillTierMeta,
+} from "@/lib/calibration";
+import {
+  getCalibration,
+  saveCalibration,
+} from "@/lib/calibration-store";
+import type { WarriorCalibration } from "@/lib/calibration";
 
 type Role = "fighter" | "coach" | "athlete";
 
-const ROLE_ACCENT: Record<Role, string> = {
-  fighter: "#e879f9",
-  coach: "#facc15",
-  athlete: "#00F0FF",
-};
-
-// ── Combat score model ──────────────────────────────────────────────────────
+function parseFeedCategory(tab: string | null): FeedCategory {
+  if (tab === "passport" || tab === "leaderboard") return tab;
+  return "feed";
+}
 
 function combatScore(level: number, elo: number): number {
   const raw = 40 + level * 2 + (elo - 1400) / 25;
@@ -63,17 +70,21 @@ function combatScore(level: number, elo: number): number {
 
 export function TacticalOS({ fighterId }: { fighterId: string }) {
   const auth = useWarriorAuth();
-  const { isNavHidden } = useDonateUi();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const viewerId =
     auth.status === "authenticated" ? auth.user.id : undefined;
 
-  const [category, setCategory] = useState<FeedCategory>("feed");
+  const [category, setCategory] = useState<FeedCategory>(() =>
+    parseFeedCategory(searchParams.get("tab")),
+  );
   const [role, setRole] = useState<Role>("fighter");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeVideo, setActiveVideo] = useState<Video | null>(null);
 
   const isDemo = fighterId === DEMO_FIGHTER_DB_ID;
   const client = useMemo(() => createWarriorBrowserClient(), []);
+  const offlineSync = useOfflineSync(client, fighterId);
 
   const [displayName, setDisplayName] = useState<string>(
     isDemo ? DEMO_FIGHTER_DISPLAY_NAME : "Воин",
@@ -83,6 +94,17 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
   const [careerNetRub, setCareerNetRub] = useState(0);
   const [sessionsCount, setSessionsCount] = useState(0);
   const [echo, setEcho] = useState<string | null>(null);
+  const [calibration, setCalibration] = useState<WarriorCalibration | null>(null);
+
+  useEffect(() => {
+    if (isDemo && !getCalibration(fighterId)) {
+      saveCalibration(
+        fighterId,
+        buildCalibration("pro", { wins: 27, losses: 4, draws: 1 }),
+      );
+    }
+    setCalibration(getCalibration(fighterId));
+  }, [fighterId, isDemo]);
 
   // ── Hydrate from Supabase (profiles · fighter_stats · training_sessions) ──
   useEffect(() => {
@@ -127,6 +149,10 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
   }, []);
 
   useEffect(() => {
+    setCategory(parseFeedCategory(searchParams.get("tab")));
+  }, [searchParams]);
+
+  useEffect(() => {
     if (category !== "feed") {
       setActiveVideo(null);
       setSearchQuery("");
@@ -144,20 +170,30 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
       ? ["HEAD COACH", "КУЗНЯ", `${netPct}% НЕТТО`]
       : role === "athlete"
       ? ["MEMBER", "KRASNODAR", `LVL ${athleteLevel}`]
+      : calibration
+      ? [
+          getSkillTierMeta(calibration.skillTier).label.toUpperCase(),
+          "WARRIOR POINT",
+          `ELO ${calibration.startingElo}`,
+        ]
       : isDemo
       ? ["KRD", "KRASNODAR", "LIGHTWEIGHT"]
       : ["WARRIOR POINT", "ROOKIE", "UNRANKED"];
 
   const stats: PassportStats = {
     name: isDemo ? DEMO_FIGHTER_DISPLAY_NAME : displayName,
-    nickname: role === "fighter" && isDemo ? "Cobra" : undefined,
+    nickname: role === "fighter" && isDemo ? "Jaguar" : undefined,
     tags,
     combatScore: isDemo ? 92.4 : combatScore(realLevel, 1400 + Math.round(totalXp / 12)),
     level: role === "athlete" ? athleteLevel : fighterLevel,
     maxLevel: MAX_LEVEL,
-    proRecord: isDemo ? "27-4-1" : "0-0-0",
-    recordMethods: isDemo ? { ko: 21, dec: 4, sub: 2 } : { ko: 0, dec: 0, sub: 0 },
-    elo: isDemo ? 1642 : 1400 + Math.round(totalXp / 12),
+    proRecord: calibration
+      ? formatRecord(calibration.record)
+      : isDemo
+        ? "27-4-1"
+        : "0-0-0",
+    recordMethods: isDemo ? { ko: 7, dec: 5, sub: 15 } : { ko: 0, dec: 0, sub: 0 },
+    elo: calibration?.startingElo ?? (isDemo ? 1642 : 1400 + Math.round(totalXp / 12)),
     weightKg: isDemo ? 70.3 : 70.0,
     heightCm: isDemo ? 178 : 175,
     reachCm: isDemo ? 182 : 178,
@@ -167,11 +203,16 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
     isWinner,
     badges:
       role === "fighter" && isDemo
-        ? ["🏆 ACA Champ", "🥇 МСМК", "🔥 5 win streak"]
+        ? ["🐆 Wrestler", "🥇 МСМК", "🔥 5 win streak"]
         : undefined,
+    verifiedFighter: calibration?.verifiedFighter ?? (role === "fighter" && isDemo),
     aiAnalysis:
       role === "fighter" && isDemo
-        ? "Cobra — агрессивный striker с высоким finishing rate..."
+        ? {
+            style: "Wrestling · pressure grappler",
+            strengths: "takedowns · ground control",
+            weakness: "дистанция",
+          }
         : undefined,
     portraitSrc: isDemo ? DEMO_FIGHTER_PORTRAIT : DEFAULT_FIGHTER_IMAGE,
     trainingThumbnailSrc: isDemo ? DEMO_TRAINING_THUMBNAIL : DEFAULT_FIGHTER_IMAGE,
@@ -240,26 +281,11 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
 
       <FeedLayout
         category={category}
-        onCategoryChange={setCategory}
-        roleAccent={ROLE_ACCENT[role]}
         profileInitials={deriveInitials(stats.name)}
         onSearch={setSearchQuery}
-        onProfileClick={() => setCategory("passport")}
+        onProfileClick={() => router.push("/profile")}
         activeVideo={activeVideo}
         onCloseVideo={() => setActiveVideo(null)}
-        bottomNav={
-          isNavHidden ? null : (
-            <nav className="relative z-20 flex shrink-0 justify-center px-4 pb-[calc(0.6rem+env(safe-area-inset-bottom,0px))] pt-1.5">
-              <Link
-                href="/map"
-                className="rounded-full border border-emerald-900/80 bg-emerald-950/90 px-5 py-2 font-[family-name:var(--font-geist-mono)] text-[10px] font-semibold uppercase tracking-[0.26em] text-emerald-400 backdrop-blur-xl transition-colors hover:border-emerald-700/70 hover:bg-emerald-900/80 hover:text-emerald-300"
-                style={{ boxShadow: "0 0 40px -12px rgba(6,78,59,0.65)" }}
-              >
-                Карты
-              </Link>
-            </nav>
-          )
-        }
       >
         <AnimatePresence mode="wait">
           <motion.div
@@ -291,6 +317,17 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
         </AnimatePresence>
 
         <AnimatePresence>
+          {offlineSync.pendingCount > 0 ? (
+            <motion.div
+              key="offline-pending"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              className="pointer-events-none sticky bottom-2 z-30 mx-auto mt-3 w-fit whitespace-nowrap rounded-full border border-cyan-400/35 bg-black/85 px-4 py-1.5 font-[family-name:var(--font-jetbrains-mono)] text-[9px] font-semibold uppercase tracking-[0.18em] text-cyan-200 backdrop-blur-md"
+            >
+              {offlineSync.isSyncing ? "⟳" : "⏱"} {offlineSync.pendingCount} · ожидает синхронизации
+            </motion.div>
+          ) : null}
           {echo ? (
             <motion.div
               key={echo}

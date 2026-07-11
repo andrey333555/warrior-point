@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { buildSessionCompleteUrl } from "@/lib/session-complete";
+import TrainerOfflineQr from "@/components/TrainerOfflineQr";
+import { resolveTrainerCheckInSite } from "@/lib/verify";
 
 type TrainerQrPageProps = {
   trainerId: number;
@@ -16,6 +18,7 @@ export default function TrainerQrPage({
 }: TrainerQrPageProps) {
   const router = useRouter();
   const [sessionUrl, setSessionUrl] = useState<string | null>(null);
+  const site = resolveTrainerCheckInSite(trainerId);
 
   useEffect(() => {
     setSessionUrl(buildSessionCompleteUrl(trainerId, window.location.origin));
@@ -63,6 +66,14 @@ export default function TrainerQrPage({
         <p className="text-sm text-gray-400">
           Отсканируй после тренировки — откроется экран завершения сессии
         </p>
+
+        <div className="mt-8 w-full max-w-sm border-t border-white/10 pt-8">
+          <TrainerOfflineQr
+            trainerId={site.trainerId}
+            gymId={site.gymId}
+            trainerName={trainerName}
+          />
+        </div>
       </div>
     </div>
   );

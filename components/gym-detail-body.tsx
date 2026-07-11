@@ -7,7 +7,7 @@ import { GYM_ACCENT_HEX } from "@/lib/gyms";
 import { gymHeroProps } from "@/lib/gym-display";
 import { createWarriorBrowserClient } from "@/lib/supabase/client";
 import { fetchGymSplits, type GymSplit } from "@/lib/supabase/splits-sync";
-import { handleBookSplit } from "@/lib/supabase/split-booking";
+import { bookSplitSeat } from "@/lib/split-booking-api";
 import GymHero from "@/components/GymHero";
 import GymTrainers from "@/components/GymTrainers";
 import { GymFighters } from "@/components/GymFighters";
@@ -73,10 +73,6 @@ export function GymDetailBody({
   }, [loadSplits]);
 
   const handleBook = async (splitId: string) => {
-    if (!client) {
-      setEcho({ tone: "err", msg: "Supabase не настроен" });
-      return;
-    }
     if (!clientId) {
       setEcho({ tone: "err", msg: "Войди в аккаунт для записи" });
       return;
@@ -85,7 +81,7 @@ export function GymDetailBody({
     setBusyId(splitId);
     setEcho(null);
 
-    const result = await handleBookSplit(client, { clientId, splitId });
+    const result = await bookSplitSeat({ clientId, splitId });
 
     setBusyId(null);
 

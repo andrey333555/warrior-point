@@ -1,11 +1,22 @@
 import { NextResponse } from "next/server";
 import { buildSessionCompleteUrl } from "@/lib/session-complete";
+import { isYooKassaConfigured } from "@/lib/payments/yookassa";
 import {
   getPaymentIntent,
   updatePaymentStatus,
 } from "@/lib/payments/store";
+import { applyServerPaymentRewards } from "@/lib/payments/apply-rewards-server";
 
 export async function GET(req: Request) {
+  // Mock-pay is a demo shortcut. The moment real YooKassa credentials exist,
+  // this route must not be able to mark anything as paid.
+  if (isYooKassaConfigured()) {
+    return NextResponse.json(
+      { ok: false, message: "Mock payment disabled" },
+      { status: 403 },
+    );
+  }
+
   const { searchParams } = new URL(req.url);
   const paymentId = searchParams.get("paymentId");
 
@@ -13,13 +24,14 @@ export async function GET(req: Request) {
     return NextResponse.redirect(new URL("/", req.url));
   }
 
-  const intent = getPaymentIntent(paymentId);
+  const intent = await getPaymentIntent(paymentId);
   if (!intent) {
     return NextResponse.redirect(new URL("/", req.url));
   }
 
   if (intent.status !== "succeeded") {
-    updatePaymentStatus(paymentId, "succeeded");
+    await updatePaymentStatus(paymentId, "succeeded");
+    await applyServerPaymentRewards(intent);
   }
 
   const returnUrl = new URL(

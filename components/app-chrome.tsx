@@ -1,12 +1,15 @@
 "use client";
 
-import { CyberNav } from "@/components/cyber-nav";
+import { Suspense } from "react";
+import { HubNav } from "@/components/hub-nav";
 import { PwaInstallBanner } from "@/components/pwa-install-banner";
 
 export function AppChrome() {
   return (
     <>
-      <CyberNav />
+      <Suspense fallback={null}>
+        <HubNav />
+      </Suspense>
       <PwaInstallBanner />
     </>
   );

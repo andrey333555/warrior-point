@@ -26,6 +26,14 @@ export const BOOKING_TYPE_LABEL: Record<BookingType, string> = {
   split: "СПЛИТ",
 };
 
+/** Маппинг названия тренировки тренера → тип брони для платежей. */
+export function inferBookingType(trainingName: string): BookingType {
+  const n = trainingName.toLowerCase();
+  if (n.includes("групп") || n.includes("group")) return "group";
+  if (n.includes("сплит") || n.includes("split") || n.includes("vip")) return "split";
+  return "individual";
+}
+
 const STORAGE_KEY = STORAGE_KEYS.bookings;
 
 const SEED_HISTORY: Booking[] = [

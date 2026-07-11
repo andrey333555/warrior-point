@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
+import { signOutWarrior } from "@/hooks/use-warrior-auth";
 import { useBookings, type Booking } from "@/lib/bookings";
 import { trainers, DEFAULT_TRAINER_IMAGE } from "@/lib/network";
 import { useXp, levelFromXp, xpForNextLevel, xpProgress } from "@/lib/xp";
@@ -291,6 +292,11 @@ export default function ProfilePage() {
   const bookings = useBookings();
   const xpState = useXp();
 
+  const handleSignOut = async () => {
+    await signOutWarrior();
+    router.push("/");
+  };
+
   const level = levelFromXp(xpState.total);
   const xpCurrent = xpProgress(xpState.total);
   const xpNext = xpForNextLevel(xpState.total);
@@ -569,7 +575,7 @@ export default function ProfilePage() {
             </button>
             <button
               type="button"
-              onClick={() => router.push("/leaderboard")}
+              onClick={() => router.push("/?tab=leaderboard")}
               className="flex flex-col items-start gap-2 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 transition-colors hover:border-yellow-400/25"
             >
               <span className="text-xl">🏆</span>
@@ -577,6 +583,17 @@ export default function ProfilePage() {
               <p className="text-[10px] text-gray-600">Топ бойцов</p>
             </button>
           </div>
+        </section>
+
+        {/* ── SIGN OUT ── */}
+        <section className="mt-8">
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="w-full rounded-2xl border border-red-500/20 bg-red-500/[0.06] py-3.5 text-sm font-semibold text-red-400/90 transition hover:border-red-500/40 hover:bg-red-500/10 active:scale-[0.99]"
+          >
+            Выйти из аккаунта
+          </button>
         </section>
 
       </div>

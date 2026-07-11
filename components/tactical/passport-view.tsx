@@ -39,9 +39,17 @@ import {
   type DonatePaymentHandler,
 } from "@/components/donate-modal";
 import { PassportHero } from "@/components/tactical/fighter-hero-banner";
+import SelfProgressCard from "@/components/SelfProgressCard";
+import type { MonthActivity } from "@/lib/motivation";
 import type { Video } from "@/lib/data";
 
 export type RoleMode = "fighter" | "coach" | "athlete";
+
+export type PassportAiAnalysis = {
+  style: string;
+  strengths: string;
+  weakness: string;
+};
 
 export type PassportStats = {
   name: string;
@@ -61,7 +69,8 @@ export type PassportStats = {
   koRatioPct: number;
   isWinner: boolean;
   badges?: string[];
-  aiAnalysis?: string;
+  verifiedFighter?: boolean;
+  aiAnalysis?: PassportAiAnalysis;
   portraitSrc?: string;
   trainingThumbnailSrc?: string;
 };
@@ -101,6 +110,15 @@ const fmtRub = new Intl.NumberFormat("ru-RU", {
 
 const PORTRAIT_FALLBACK = DEMO_FIGHTER_PORTRAIT;
 const THUMB_FALLBACK = DEFAULT_FIGHTER_IMAGE;
+
+/** Monthly self-progress — wire from Supabase training history later. */
+const SELF_PROGRESS_ACTIVITY: MonthActivity = {
+  sessions: 8,
+  xpGained: 800,
+  eloChange: 45,
+  streakDays: 5,
+  prevMonthSessions: 6,
+};
 
 function SafeImg({
   src,
@@ -212,6 +230,7 @@ function fightToVideo(fight: LeagueFight, fighterName: string): Video {
 // ── Sub-sections ────────────────────────────────────────────────────────────
 
 function StatsGrid({ pairs }: { pairs: readonly (readonly [string, string])[] }) {
+  if (!pairs.length) return null;
   return (
     <div className="mt-4 grid grid-cols-2 gap-3 px-4">
       {pairs.map(([label, value]) => (
@@ -221,6 +240,35 @@ function StatsGrid({ pairs }: { pairs: readonly (readonly [string, string])[] })
         >
           <p className="text-xs text-white/40">{label}</p>
           <p className="text-lg font-semibold text-white">{value}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PhysiqueStrip({ stats }: { stats: PassportStats }) {
+  const items = [
+    { label: "Вес", value: stats.weightKg.toFixed(1), unit: "кг" },
+    { label: "Рост", value: String(stats.heightCm ?? 178), unit: "см" },
+    { label: "Размах", value: String(stats.reachCm ?? 182), unit: "см" },
+    { label: "Возраст", value: String(stats.age ?? 28), unit: "" },
+  ] as const;
+
+  return (
+    <div
+      className={`mx-5 grid grid-cols-4 gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] px-2 py-2.5 backdrop-blur-md ${EASE}`}
+    >
+      {items.map(({ label, value, unit }) => (
+        <div key={label} className="min-w-0 text-center">
+          <p className="truncate font-[family-name:var(--font-jetbrains-mono)] text-[8px] uppercase tracking-[0.14em] text-white/35">
+            {label}
+          </p>
+          <p className="mt-0.5 font-[family-name:var(--font-jetbrains-mono)] text-[13px] font-semibold tabular-nums leading-none text-white">
+            {value}
+            {unit ? (
+              <span className="ml-0.5 text-[9px] font-medium text-white/40">{unit}</span>
+            ) : null}
+          </p>
         </div>
       ))}
     </div>
@@ -248,12 +296,18 @@ function statsPairsFor(
       ["Баланс", fmtRub.format(econ.balanceRub)],
     ];
   }
-  return [
-    ["Вес", `${stats.weightKg.toFixed(1)} кг`],
-    ["Рост", `${stats.heightCm ?? 178} см`],
-    ["Размах", `${stats.reachCm ?? 182} см`],
-    ["Возраст", String(stats.age ?? 28)],
-  ];
+  return [];
+}
+
+function VerifiedBadge() {
+  return (
+    <div
+      className={`shrink-0 rounded-full border border-emerald-400/35 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-200 backdrop-blur ${EASE}`}
+      style={{ boxShadow: "0 0 16px -6px rgba(52,211,153,0.35)" }}
+    >
+      ✅ подтвержденный боец
+    </div>
+  );
 }
 
 function Badge({ children }: { children: React.ReactNode }) {
@@ -271,6 +325,7 @@ function PassportTop({
   nickname,
   tags,
   badges,
+  verifiedFighter,
   accent,
   isWinner,
   role,
@@ -280,6 +335,7 @@ function PassportTop({
   nickname?: string;
   tags: string[];
   badges?: string[];
+  verifiedFighter?: boolean;
   accent: string;
   isWinner: boolean;
   role: RoleMode;
@@ -345,9 +401,10 @@ function PassportTop({
           </div>
         </div>
       </div>
-      {badges && badges.length > 0 ? (
+      {verifiedFighter || (badges && badges.length > 0) ? (
         <div className="mt-2 flex gap-2 overflow-x-auto scrollbar-hide">
-          {badges.map((badge) => (
+          {verifiedFighter ? <VerifiedBadge /> : null}
+          {badges?.map((badge) => (
             <Badge key={badge}>{badge}</Badge>
           ))}
         </div>
@@ -478,13 +535,20 @@ function RecordBlock({
   );
 }
 
-function AiAnalysisCard({ text }: { text: string }) {
+function AiAnalysisCard({ analysis }: { analysis: PassportAiAnalysis }) {
   return (
     <div
-      className={`mx-4 mt-4 rounded-xl border border-purple-500/20 bg-white/[0.03] p-4 backdrop-blur-md ${EASE}`}
+      className={`mx-5 rounded-xl border border-purple-500/20 bg-white/[0.03] px-4 py-3 backdrop-blur-md ${EASE}`}
     >
-      <p className="text-xs text-purple-300/80">AI анализ:</p>
-      <p className="mt-1 text-sm leading-relaxed text-white/70">{text}</p>
+      <p className="text-sm leading-snug text-white/90">
+        🤖 AI: <span className="text-white/45">Стиль —</span> {analysis.style}
+      </p>
+      <p className="mt-1.5 text-sm leading-snug text-white/85">
+        ⚡ <span className="text-white/45">Сильные стороны:</span> {analysis.strengths}
+      </p>
+      <p className="mt-1 text-sm leading-snug text-amber-200/75">
+        ⚠️ <span className="text-white/45">Слабое:</span> {analysis.weakness}
+      </p>
     </div>
   );
 }
@@ -532,7 +596,7 @@ function PersonalTrainingCard() {
       </p>
       <button
         type="button"
-        onClick={() => router.push("/trainer")}
+        onClick={() => router.push("/ai-match")}
         className="mt-3 w-full rounded-xl py-4 font-semibold transition active:scale-[0.98]"
         style={{ background: "#C9A84C", color: "#0A0A0A" }}
       >
@@ -540,7 +604,7 @@ function PersonalTrainingCard() {
       </button>
       <button
         type="button"
-        onClick={() => router.push("/booking/1")}
+        onClick={() => router.push("/booking/favorites")}
         className="mt-2 w-full rounded-xl py-3 text-sm font-medium transition active:scale-[0.98]"
         style={{
           background: "rgba(201,168,76,0.15)",
@@ -711,16 +775,13 @@ export function PassportView({
       setDonateBusy(true);
       setDonateError(null);
 
-      const result = await submitFighterDonation(
-        createWarriorBrowserClient(),
-        {
-          recipientId: fighterId,
-          grossRub: amount,
-          comment,
-          viewerId,
-          fundraiserFallback: fundraiser,
-        },
-      );
+      const result = await submitFighterDonation({
+        recipientId: fighterId,
+        grossRub: amount,
+        comment,
+        viewerId,
+        fundraiserFallback: fundraiser,
+      });
 
       setDonateBusy(false);
 
@@ -769,6 +830,7 @@ export function PassportView({
           nickname={stats.nickname}
           tags={stats.tags}
           badges={stats.badges}
+          verifiedFighter={stats.verifiedFighter}
           accent={accent}
           isWinner={stats.isWinner}
           role={role}
@@ -776,21 +838,8 @@ export function PassportView({
         />
       </motion.div>
 
-      <motion.div
-        {...sectionMotion(0.02)}
-        className="mx-5 rounded-2xl border border-white/[0.08] bg-zinc-900/60 p-3"
-      >
-        <RoundMini xp={totalXp} />
-        <Link
-          href="/levels"
-          className={`mt-3 block rounded-xl border border-white/10 bg-white/[0.04] py-2.5 text-center font-[family-name:var(--font-jetbrains-mono)] text-[10px] font-semibold uppercase tracking-[0.12em] text-neutral-300 ${EASE} hover:bg-white/[0.08]`}
-        >
-          Раунды
-        </Link>
-      </motion.div>
-
-      <motion.div {...sectionMotion(0.05)} className="relative shrink-0">
-        <PassportHero glowColor={glow} imageSrc={stats.portraitSrc} heightClass="h-[240px]" />
+      <motion.div {...sectionMotion(0.02)} className="relative shrink-0">
+        <PassportHero glowColor={glow} imageSrc={stats.portraitSrc} heightClass="h-[280px]" />
         {role === "fighter" ? (
           <AnimatePresence mode="wait">
             <motion.div
@@ -840,6 +889,23 @@ export function PassportView({
         </AnimatePresence>
       ) : null}
 
+      <motion.div
+        {...sectionMotion(0.04)}
+        className="mx-5 rounded-2xl border border-white/[0.08] bg-zinc-900/60 p-3"
+      >
+        <RoundMini xp={totalXp} />
+        <Link
+          href="/levels"
+          className={`mt-3 block rounded-xl border border-white/10 bg-white/[0.04] py-2.5 text-center font-[family-name:var(--font-jetbrains-mono)] text-[10px] font-semibold uppercase tracking-[0.12em] text-neutral-300 ${EASE} hover:bg-white/[0.08]`}
+        >
+          Раунды
+        </Link>
+      </motion.div>
+
+      <motion.div {...sectionMotion(0.06)}>
+        <SelfProgressCard activity={SELF_PROGRESS_ACTIVITY} />
+      </motion.div>
+
       {role === "fighter" && fighterId ? (
         <motion.div {...sectionMotion(0.07)} className="mx-5 flex justify-center">
           <SupportFighterButton
@@ -860,13 +926,17 @@ export function PassportView({
           exit={{ opacity: 0, y: 20 }}
           transition={{ duration: 0.4 }}
         >
-          <StatsGrid pairs={statPairs} />
+          {role === "fighter" ? (
+            <PhysiqueStrip stats={stats} />
+          ) : (
+            <StatsGrid pairs={statPairs} />
+          )}
         </motion.div>
       </AnimatePresence>
 
       {stats.aiAnalysis ? (
         <motion.div {...sectionMotion(0.12)}>
-          <AiAnalysisCard text={stats.aiAnalysis} />
+          <AiAnalysisCard analysis={stats.aiAnalysis} />
         </motion.div>
       ) : null}
 

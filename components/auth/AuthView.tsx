@@ -7,6 +7,7 @@ import { Caption } from "@/components/auth/Caption";
 import { Divider } from "@/components/auth/Divider";
 import { SocialButtons } from "@/components/auth/SocialButtons";
 import { EmailForm } from "@/components/auth/EmailForm";
+import { CalibrationForm } from "@/components/auth/CalibrationForm";
 import { SubmitButton } from "@/components/auth/SubmitButton";
 import { Footer } from "@/components/auth/Footer";
 import { TelegramButton } from "@/components/auth/TelegramButton";
@@ -34,6 +35,7 @@ function AuthCardContent() {
         <Divider label="ИЛИ" />
 
         <EmailForm />
+        <CalibrationForm />
         <SubmitButton />
         <Footer />
       </AuthCard>
