@@ -1,10 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, JetBrains_Mono } from "next/font/google";
 import Script from "next/script";
-import { CyberNav } from "@/components/cyber-nav";
+import { AppChrome } from "@/components/app-chrome";
 import { TelegramTheme } from "@/components/telegram-theme";
-import { PwaInstallBanner } from "@/components/pwa-install-banner";
 import { StoreInit } from "@/components/StoreInit";
+import { DonateUiProvider } from "@/hooks/use-donate-ui";
 import { Providers } from "./providers";
 import { GuestLinkActivatorRoot } from "@/components/guest-link-activator-root";
 import "./globals.css";
@@ -87,11 +87,12 @@ export default function RootLayout({
 
         <StoreInit />
         <Providers>
-          <GuestLinkActivatorRoot />
-          {children}
+          <DonateUiProvider>
+            <GuestLinkActivatorRoot />
+            {children}
+            <AppChrome />
+          </DonateUiProvider>
         </Providers>
-        <CyberNav />
-        <PwaInstallBanner />
       </body>
     </html>
   );

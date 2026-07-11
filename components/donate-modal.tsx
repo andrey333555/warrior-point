@@ -6,6 +6,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { HexAvatar } from "@/components/hex-avatar";
 import type { FundraiserProgress } from "@/lib/supabase/donations";
@@ -82,7 +83,12 @@ export function DonateModal({
   const [amountMode, setAmountMode] = useState<AmountMode>("preset");
   const [comment, setComment] = useState("");
   const [donePayload, setDonePayload] = useState<DonationSuccessPayload | null>(null);
+  const [mounted, setMounted] = useState(false);
   const amountInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -147,14 +153,16 @@ export function DonateModal({
   const isPresetActive = (preset: number) =>
     amountMode === "preset" && amount === preset;
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <AnimatePresence>
       {open ? (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[260] flex items-end justify-center bg-black/70 backdrop-blur-sm"
+          className="fixed inset-0 z-[9999] flex items-end justify-center bg-[#0A0A0A]/95 backdrop-blur-sm"
           onClick={screen === "pick" ? onClose : undefined}
         >
           <motion.div
@@ -321,7 +329,8 @@ export function DonateModal({
           </motion.div>
         </motion.div>
       ) : null}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }
 

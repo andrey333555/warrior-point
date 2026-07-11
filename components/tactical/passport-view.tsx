@@ -13,6 +13,7 @@ import { AnimatePresence, animate, motion, useMotionValue, useTransform } from "
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useDonateUi } from "@/hooks/use-donate-ui";
 import { RoundMini } from "@/components/RoundProgress";
 import { FightsList } from "@/components/fights-list";
 import {
@@ -633,6 +634,7 @@ export function PassportView({
   const [liveRecord, setLiveRecord] = useState(stats.proRecord);
   const [liveElo, setLiveElo] = useState(stats.elo);
   const [isDonateModalOpen, setIsDonateModalOpen] = useState(false);
+  const { setDonateOpen } = useDonateUi();
   const [donateBusy, setDonateBusy] = useState(false);
   const [donateError, setDonateError] = useState<string | null>(null);
   const [donorBalance, setDonorBalance] = useState(15_000);
@@ -649,6 +651,11 @@ export function PassportView({
   );
 
   const latestFight = useMemo(() => getLatestFight(), []);
+
+  useEffect(() => {
+    setDonateOpen(isDonateModalOpen);
+    return () => setDonateOpen(false);
+  }, [isDonateModalOpen, setDonateOpen]);
 
   const runSherdogSync = useCallback(async () => {
     const client = createWarriorBrowserClient();
@@ -744,8 +751,9 @@ export function PassportView({
 
   const closeDonateModal = useCallback(() => {
     setIsDonateModalOpen(false);
+    setDonateOpen(false);
     setDonateError(null);
-  }, []);
+  }, [setDonateOpen]);
 
   const statPairs = statsPairsFor(role, stats, econ);
 
@@ -834,7 +842,12 @@ export function PassportView({
 
       {role === "fighter" && fighterId ? (
         <motion.div {...sectionMotion(0.07)} className="mx-5 flex justify-center">
-          <SupportFighterButton onClick={() => setIsDonateModalOpen(true)} />
+          <SupportFighterButton
+            onClick={() => {
+              setIsDonateModalOpen(true);
+              setDonateOpen(true);
+            }}
+          />
         </motion.div>
       ) : null}
 

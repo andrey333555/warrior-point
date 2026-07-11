@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import { HIDE_NAV_CLASS, useDonateUi } from "@/hooks/use-donate-ui";
 
 const LINKS = [
   { href: "/", label: "Passport", match: /^\/$/ },
@@ -9,11 +11,22 @@ const LINKS = [
   { href: "/map", label: "Карты", match: /^\/map/, variant: "map" as const },
 ];
 
-/** Nav visible only on main hub screens — hidden on booking, trainer, flows, etc. */
-const NAV_VISIBLE_ROUTES = new Set(["/", "/map", "/leaderboard", "/profile"]);
+/** Nav only on main hubs. Hidden everywhere else, including:
+ *  /session/complete · /booking/* · /trainer/* · /vip · /referral · /gym/* … */
+const NAV_VISIBLE_ROUTES = new Set([
+  "/",
+  "/map",
+  "/leaderboard",
+  "/profile",
+]);
+
+function normalizePath(pathname: string): string {
+  if (!pathname || pathname === "/") return "/";
+  return pathname.replace(/\/$/, "");
+}
 
 function isNavVisible(pathname: string): boolean {
-  return NAV_VISIBLE_ROUTES.has(pathname);
+  return NAV_VISIBLE_ROUTES.has(normalizePath(pathname));
 }
 
 /**
@@ -23,8 +36,26 @@ function isNavVisible(pathname: string): boolean {
  */
 export function CyberNav() {
   const pathname = usePathname() ?? "";
+  const { isNavHidden } = useDonateUi();
+  const [hidden, setHidden] = useState(false);
 
-  if (!isNavVisible(pathname)) return null;
+  useEffect(() => {
+    const sync = () => {
+      setHidden(document.body.classList.contains(HIDE_NAV_CLASS));
+    };
+
+    sync();
+
+    const observer = new MutationObserver(sync);
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  if (hidden || isNavHidden || !isNavVisible(pathname)) return null;
 
   return (
     <nav

@@ -14,6 +14,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useDonateUi } from "@/hooks/use-donate-ui";
 import { AnimatePresence, motion } from "framer-motion";
 import { useWarriorAuth } from "@/hooks/use-warrior-auth";
 import { createWarriorBrowserClient } from "@/lib/supabase/client";
@@ -62,6 +63,7 @@ function combatScore(level: number, elo: number): number {
 
 export function TacticalOS({ fighterId }: { fighterId: string }) {
   const auth = useWarriorAuth();
+  const { isNavHidden } = useDonateUi();
   const viewerId =
     auth.status === "authenticated" ? auth.user.id : undefined;
 
@@ -246,15 +248,17 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
         activeVideo={activeVideo}
         onCloseVideo={() => setActiveVideo(null)}
         bottomNav={
-          <nav className="relative z-20 flex shrink-0 justify-center px-4 pb-[calc(0.6rem+env(safe-area-inset-bottom,0px))] pt-1.5">
-            <Link
-              href="/map"
-              className="rounded-full border border-emerald-900/80 bg-emerald-950/90 px-5 py-2 font-[family-name:var(--font-geist-mono)] text-[10px] font-semibold uppercase tracking-[0.26em] text-emerald-400 backdrop-blur-xl transition-colors hover:border-emerald-700/70 hover:bg-emerald-900/80 hover:text-emerald-300"
-              style={{ boxShadow: "0 0 40px -12px rgba(6,78,59,0.65)" }}
-            >
-              Карты
-            </Link>
-          </nav>
+          isNavHidden ? null : (
+            <nav className="relative z-20 flex shrink-0 justify-center px-4 pb-[calc(0.6rem+env(safe-area-inset-bottom,0px))] pt-1.5">
+              <Link
+                href="/map"
+                className="rounded-full border border-emerald-900/80 bg-emerald-950/90 px-5 py-2 font-[family-name:var(--font-geist-mono)] text-[10px] font-semibold uppercase tracking-[0.26em] text-emerald-400 backdrop-blur-xl transition-colors hover:border-emerald-700/70 hover:bg-emerald-900/80 hover:text-emerald-300"
+                style={{ boxShadow: "0 0 40px -12px rgba(6,78,59,0.65)" }}
+              >
+                Карты
+              </Link>
+            </nav>
+          )
         }
       >
         <AnimatePresence mode="wait">

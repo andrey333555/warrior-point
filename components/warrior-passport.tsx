@@ -3,6 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useDonateUi } from "@/hooks/use-donate-ui";
 import {
   advanceFighterXp,
   DEMO_SESSION_GROSS_RUB,
@@ -105,6 +106,7 @@ const TABS: ReadonlyArray<CyberTabDef<TabId>> = [
 export function WarriorPassport({ fighterId }: { fighterId: string }) {
   const router = useRouter();
   const [isDonateModalOpen, setIsDonateModalOpen] = useState(false);
+  const { setDonateOpen } = useDonateUi();
   const [trainingMenuOpen, setTrainingMenuOpen] = useState(false);
   const [donateBusy, setDonateBusy] = useState(false);
   const [donateError, setDonateError] = useState<string | null>(null);
@@ -232,6 +234,11 @@ export function WarriorPassport({ fighterId }: { fighterId: string }) {
   }, []);
 
   useEffect(() => {
+    setDonateOpen(isDonateModalOpen);
+    return () => setDonateOpen(false);
+  }, [isDonateModalOpen, setDonateOpen]);
+
+  useEffect(() => {
     if (!remoteBootstrapped) return;
     const client = createWarriorBrowserClient();
     if (!client) return;
@@ -283,8 +290,9 @@ export function WarriorPassport({ fighterId }: { fighterId: string }) {
 
   const closeDonateModal = useCallback((): void => {
     setIsDonateModalOpen(false);
+    setDonateOpen(false);
     setDonateError(null);
-  }, []);
+  }, [setDonateOpen]);
 
   const pickTrainingType = useCallback((label: string): void => {
     setTrainingMenuOpen(false);
@@ -596,7 +604,10 @@ export function WarriorPassport({ fighterId }: { fighterId: string }) {
 
                 <button
                   type="button"
-                  onClick={() => setIsDonateModalOpen(true)}
+                  onClick={() => {
+                    setIsDonateModalOpen(true);
+                    setDonateOpen(true);
+                  }}
                   className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/40 bg-emerald-500/[0.08] px-4 py-3 font-[family-name:var(--font-geist-mono)] text-[9px] font-bold uppercase tracking-[0.2em] text-emerald-200 transition-colors hover:bg-emerald-500/[0.14]"
                 >
                   <SbpMiniGlyph />

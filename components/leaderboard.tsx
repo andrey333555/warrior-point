@@ -1,23 +1,85 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { fighters, getGymName, findTrainer, findGym, type Fighter } from "@/lib/fighters";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { useDonateUi } from "@/hooks/use-donate-ui";
 
 function cloneFighters() {
   return fighters.map((f) => ({ ...f }));
 }
 
+/** Current warrior profile — demo passport (Cobra). */
+const CURRENT_USER = {
+  name: "Cobra",
+  elo: 1820,
+  round: 13,
+  wins: 27,
+} as const;
+
+function parseWins(record: string): number {
+  const parts = record.split("-").map((p) => Number.parseInt(p, 10));
+  return Number.isFinite(parts[0]) ? parts[0]! : 0;
+}
+
+function eloToRound(elo: number): number {
+  return Math.min(23, Math.max(1, Math.round(elo / 140)));
+}
+
+function formatDelta(value: number, suffix = ""): string {
+  if (value === 0) return "0";
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value}${suffix}`;
+}
+
 // ── Compare drawer ────────────────────────────────────────────────────────────
 
-function CompareRow({ label, a, b }: { label: string; a: string; b: string }) {
+function StatColumn({
+  label,
+  you,
+  them,
+  delta,
+  highlight,
+}: {
+  label: string;
+  you: string | number;
+  them: string | number;
+  delta: number;
+  highlight?: "ahead" | "behind" | "neutral";
+}) {
+  const deltaColor =
+    highlight === "ahead"
+      ? "text-emerald-400"
+      : highlight === "behind"
+        ? "text-amber-400"
+        : "text-zinc-500";
+
   return (
-    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 py-2">
-      <span className="text-right text-sm font-semibold text-white">{a}</span>
-      <span className="shrink-0 text-[10px] uppercase tracking-widest text-gray-600">{label}</span>
-      <span className="text-sm font-semibold text-white">{b}</span>
+    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 py-3">
+      <div className="text-right">
+        <p className="font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.18em] text-zinc-600">
+          {label}
+        </p>
+        <p className="mt-0.5 font-[family-name:var(--font-jetbrains-mono)] text-lg font-bold tabular-nums text-cyan-200">
+          {you}
+        </p>
+      </div>
+      <span
+        className={`shrink-0 rounded-full border border-zinc-800 bg-zinc-900 px-2 py-0.5 font-[family-name:var(--font-jetbrains-mono)] text-[10px] font-semibold tabular-nums ${deltaColor}`}
+      >
+        {formatDelta(delta)}
+      </span>
+      <div>
+        <p className="font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.18em] text-zinc-600">
+          {label}
+        </p>
+        <p className="mt-0.5 font-[family-name:var(--font-jetbrains-mono)] text-lg font-bold tabular-nums text-white">
+          {them}
+        </p>
+      </div>
     </div>
   );
 }
@@ -32,13 +94,36 @@ function CompareDrawer({
   const router = useRouter();
   const trainer = findTrainer(fighter.trainerId);
   const gym = findGym(fighter.gyms[0] ?? 0);
+  const [mounted, setMounted] = useState(false);
 
-  return (
+  const fighterWins = parseWins(fighter.record);
+  const fighterRound = eloToRound(fighter.elo);
+
+  const eloDelta = fighter.elo - CURRENT_USER.elo;
+  const roundDelta = fighterRound - CURRENT_USER.round;
+  const winsDelta = fighterWins - CURRENT_USER.wins;
+
+  const motivation =
+    roundDelta > 0
+      ? `до этого уровня: +${roundDelta} ${roundDelta === 1 ? "раунд" : roundDelta < 5 ? "раунда" : "раундов"}`
+      : roundDelta < 0
+        ? `Ты на ${Math.abs(roundDelta)} ${Math.abs(roundDelta) === 1 ? "раунд" : Math.abs(roundDelta) < 5 ? "раунда" : "раундов"} выше — закрепляй ELO`
+        : eloDelta > 0
+          ? `На одном раунде — добери +${eloDelta} ELO`
+          : "Ты впереди по рейтингу — держи темп";
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
+
+  return createPortal(
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 z-[9999] flex items-end justify-center bg-[#0A0A0A]/95 backdrop-blur-sm"
       onClick={onClose}
     >
       <motion.div
@@ -48,22 +133,66 @@ function CompareDrawer({
         transition={{ type: "spring", stiffness: 340, damping: 32 }}
         onClick={(e) => e.stopPropagation()}
         className="w-full max-w-[420px] rounded-t-3xl border-t border-zinc-800 bg-zinc-950 px-5 pb-10 pt-4"
+        style={{ paddingBottom: "max(2.5rem, env(safe-area-inset-bottom, 0px))" }}
       >
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-zinc-700" />
 
         <p className="font-[family-name:var(--font-jetbrains-mono)] text-[9px] uppercase tracking-[0.22em] text-yellow-400/80">
-          Профиль бойца
+          Сравнение
         </p>
-        <h2 className="mt-1 text-xl font-bold text-white">{fighter.name}</h2>
 
-        <div className="mt-5 divide-y divide-zinc-800 rounded-2xl border border-zinc-800 bg-zinc-900 px-4">
-          <CompareRow label="рекорд" a={fighter.record} b={`ELO ${fighter.elo}`} />
-          <CompareRow label="стиль" a={fighter.style.join(" · ")} b={`+${fighter.change}`} />
-          <CompareRow
-            label="тренер"
-            a={trainer?.name ?? "—"}
-            b={gym?.name ?? "—"}
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <div className="rounded-2xl border border-cyan-400/30 bg-cyan-500/[0.06] px-3 py-2.5">
+            <p className="font-[family-name:var(--font-jetbrains-mono)] text-[8px] uppercase tracking-[0.2em] text-cyan-400/80">
+              Ты
+            </p>
+            <p className="mt-1 truncate font-[family-name:var(--font-geist-sans)] text-base font-bold text-cyan-100">
+              {CURRENT_USER.name}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-zinc-700 bg-zinc-900 px-3 py-2.5">
+            <p className="font-[family-name:var(--font-jetbrains-mono)] text-[8px] uppercase tracking-[0.2em] text-zinc-500">
+              Боец
+            </p>
+            <p className="mt-1 truncate font-[family-name:var(--font-geist-sans)] text-base font-bold text-white">
+              {fighter.name}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 divide-y divide-zinc-800 rounded-2xl border border-zinc-800 bg-zinc-900/80 px-4">
+          <StatColumn
+            label="ELO"
+            you={CURRENT_USER.elo}
+            them={fighter.elo}
+            delta={eloDelta}
+            highlight={eloDelta > 0 ? "behind" : eloDelta < 0 ? "ahead" : "neutral"}
           />
+          <StatColumn
+            label="Раунд"
+            you={CURRENT_USER.round}
+            them={fighterRound}
+            delta={roundDelta}
+            highlight={roundDelta > 0 ? "behind" : roundDelta < 0 ? "ahead" : "neutral"}
+          />
+          <StatColumn
+            label="Побед"
+            you={CURRENT_USER.wins}
+            them={fighterWins}
+            delta={winsDelta}
+            highlight={winsDelta > 0 ? "behind" : winsDelta < 0 ? "ahead" : "neutral"}
+          />
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-yellow-400/25 bg-yellow-400/[0.06] px-4 py-3 text-center">
+          <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] font-semibold uppercase tracking-[0.16em] text-yellow-300/90">
+            {motivation}
+          </p>
+          {eloDelta > 0 ? (
+            <p className="mt-1 font-[family-name:var(--font-geist-sans)] text-xs text-zinc-400">
+              ELO-разрыв: {formatDelta(eloDelta)} · {trainer?.name ?? "тренер"} · {gym?.name ?? "зал"}
+            </p>
+          ) : null}
         </div>
 
         <div className="mt-5 grid grid-cols-2 gap-3">
@@ -88,7 +217,8 @@ function CompareDrawer({
           </Button>
         </div>
       </motion.div>
-    </motion.div>
+    </motion.div>,
+    document.body,
   );
 }
 
@@ -96,9 +226,15 @@ function CompareDrawer({
 
 export default function Leaderboard() {
   const router = useRouter();
+  const { setFighterModalOpen } = useDonateUi();
   const [data, setData] = useState(() => cloneFighters());
   const [tick, setTick] = useState(0);
   const [comparing, setComparing] = useState<Fighter | null>(null);
+
+  useEffect(() => {
+    setFighterModalOpen(!!comparing);
+    return () => setFighterModalOpen(false);
+  }, [comparing, setFighterModalOpen]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -114,6 +250,11 @@ export default function Leaderboard() {
 
     return () => clearInterval(interval);
   }, []);
+
+  const closeCompare = () => {
+    setComparing(null);
+    setFighterModalOpen(false);
+  };
 
   const sorted = [...data].sort((a, b) => b.elo - a.elo);
 
@@ -198,7 +339,10 @@ export default function Leaderboard() {
                   size="sm"
                   fullWidth
                   className="flex-1"
-                  onClick={() => setComparing(f)}
+                  onClick={() => {
+                    setComparing(f);
+                    setFighterModalOpen(true);
+                  }}
                 >
                   Сравнить
                 </Button>
@@ -214,7 +358,7 @@ export default function Leaderboard() {
 
       <AnimatePresence>
         {comparing ? (
-          <CompareDrawer fighter={comparing} onClose={() => setComparing(null)} />
+          <CompareDrawer fighter={comparing} onClose={closeCompare} />
         ) : null}
       </AnimatePresence>
     </>
