@@ -6,6 +6,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useWarriorAuth } from "@/hooks/use-warrior-auth";
 import { AuthGate } from "@/components/auth-gate";
 import CyberMapLoader from "@/components/cyber-map-loader";
@@ -18,6 +19,7 @@ const CATEGORY_ROWS: { cat: GymCategory }[] = [
 ];
 
 export default function MapScreen() {
+  const router = useRouter();
   const auth = useWarriorAuth();
   const [bookEcho, setBookEcho] = useState<string | null>(null);
 
@@ -89,6 +91,16 @@ export default function MapScreen() {
         {/* Map */}
         <div className="relative min-h-0 flex-1">
           <CyberMapLoader clientId={clientId} onBooked={setBookEcho} />
+
+          <div className="pointer-events-none absolute inset-x-0 bottom-4 z-[1100] flex justify-center px-4">
+            <button
+              type="button"
+              onClick={() => router.push("/gym/register")}
+              className="pointer-events-auto rounded-full border border-[#C9A84C]/35 bg-black/85 px-5 py-2.5 font-[family-name:var(--font-jetbrains-mono)] text-[10px] font-semibold uppercase tracking-[0.14em] text-[#C9A84C] shadow-[0_0_24px_-6px_rgba(201,168,76,0.45)] backdrop-blur-md transition active:scale-95 hover:border-[#C9A84C]/55 hover:text-[#e0c878]"
+            >
+              + Добавить свой зал
+            </button>
+          </div>
         </div>
 
         {/* Booking echo */}

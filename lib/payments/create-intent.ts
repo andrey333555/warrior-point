@@ -31,6 +31,9 @@ export async function createFightPayment(
   returnUrl.searchParams.set("paymentId", paymentId);
   returnUrl.searchParams.set("type", input.trainingType);
   returnUrl.searchParams.set("bookingId", bookingId);
+  returnUrl.searchParams.set("trainer", input.trainerName);
+  returnUrl.searchParams.set("gym", input.gymName);
+  returnUrl.searchParams.set("gross", String(grossRub));
 
   const intent: PaymentIntent = {
     id: paymentId,

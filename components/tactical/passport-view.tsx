@@ -40,7 +40,12 @@ import {
 } from "@/components/donate-modal";
 import { PassportHero } from "@/components/tactical/fighter-hero-banner";
 import SelfProgressCard from "@/components/SelfProgressCard";
+import ShareablePoster, {
+  type ShareablePosterData,
+} from "@/components/ShareablePoster";
 import type { MonthActivity } from "@/lib/motivation";
+import { getRoundByXP } from "@/lib/levels";
+import { getReferralState } from "@/lib/referral";
 import type { Video } from "@/lib/data";
 
 export type RoleMode = "fighter" | "coach" | "athlete";
@@ -119,6 +124,53 @@ const SELF_PROGRESS_ACTIVITY: MonthActivity = {
   streakDays: 5,
   prevMonthSessions: 6,
 };
+
+function parseWinStreak(badges?: string[]): number {
+  if (!badges?.length) return 0;
+  for (const badge of badges) {
+    const match = badge.match(/(\d+)\s*win/i);
+    if (match) return Number.parseInt(match[1]!, 10);
+  }
+  return 0;
+}
+
+function buildSharePosterData(opts: {
+  stats: PassportStats;
+  proRecord: string;
+  elo: number;
+  totalXp: number;
+  activity: MonthActivity;
+}): ShareablePosterData {
+  const round = getRoundByXP(opts.totalXp);
+  const referral = getReferralState();
+  const cityTag =
+    opts.stats.tags.find((t) => /krd|krasnodar|global|city/i.test(t)) ??
+    opts.stats.tags[1] ??
+    "Global";
+  const weightTag =
+    opts.stats.tags.find((t) =>
+      /light|feather|middle|heavy|weight|кг/i.test(t),
+    ) ?? `${opts.stats.weightKg} кг`;
+  const winStreak = parseWinStreak(opts.stats.badges);
+
+  return {
+    name: opts.stats.nickname ?? opts.stats.name,
+    nickname: opts.stats.tags[0] ?? "Warrior Point",
+    photo: opts.stats.portraitSrc ?? PORTRAIT_FALLBACK,
+    record: opts.proRecord,
+    elo: opts.elo,
+    round: round.round,
+    roundLabel: round.label,
+    city: cityTag,
+    weight: weightTag,
+    streak: opts.activity.streakDays,
+    winStreak: winStreak || opts.activity.streakDays,
+    badges: opts.stats.badges ?? [],
+    isNewcomer: opts.proRecord === "0-0-0" || opts.proRecord === "0-0",
+    monthSessions: opts.activity.sessions,
+    referralCode: referral.referralCode,
+  };
+}
 
 function SafeImg({
   src,
@@ -698,6 +750,7 @@ export function PassportView({
   const [liveRecord, setLiveRecord] = useState(stats.proRecord);
   const [liveElo, setLiveElo] = useState(stats.elo);
   const [isDonateModalOpen, setIsDonateModalOpen] = useState(false);
+  const [showShare, setShowShare] = useState(false);
   const { setDonateOpen } = useDonateUi();
   const [donateBusy, setDonateBusy] = useState(false);
   const [donateError, setDonateError] = useState<string | null>(null);
@@ -816,6 +869,18 @@ export function PassportView({
     setDonateError(null);
   }, [setDonateOpen]);
 
+  const sharePosterData = useMemo(
+    () =>
+      buildSharePosterData({
+        stats,
+        proRecord: liveRecord,
+        elo: liveElo,
+        totalXp,
+        activity: SELF_PROGRESS_ACTIVITY,
+      }),
+    [stats, liveRecord, liveElo, totalXp],
+  );
+
   const statPairs = statsPairsFor(role, stats, econ);
 
   const handleLeagueClick = (id: string) => {
@@ -894,12 +959,21 @@ export function PassportView({
         className="mx-5 rounded-2xl border border-white/[0.08] bg-zinc-900/60 p-3"
       >
         <RoundMini xp={totalXp} />
-        <Link
-          href="/levels"
-          className={`mt-3 block rounded-xl border border-white/10 bg-white/[0.04] py-2.5 text-center font-[family-name:var(--font-jetbrains-mono)] text-[10px] font-semibold uppercase tracking-[0.12em] text-neutral-300 ${EASE} hover:bg-white/[0.08]`}
-        >
-          Раунды
-        </Link>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <Link
+            href="/levels"
+            className={`rounded-xl border border-white/10 bg-white/[0.04] py-2.5 text-center font-[family-name:var(--font-jetbrains-mono)] text-[10px] font-semibold uppercase tracking-[0.12em] text-neutral-300 ${EASE} hover:bg-white/[0.08]`}
+          >
+            Раунды
+          </Link>
+          <button
+            type="button"
+            onClick={() => setShowShare(true)}
+            className={`rounded-xl border border-[#C9A84C]/25 bg-[#C9A84C]/10 py-2.5 text-center font-[family-name:var(--font-jetbrains-mono)] text-[10px] font-semibold uppercase tracking-[0.12em] text-[#C9A84C] ${EASE} hover:bg-[#C9A84C]/20`}
+          >
+            📤 Поделиться
+          </button>
+        </div>
       </motion.div>
 
       <motion.div {...sectionMotion(0.06)}>
@@ -1005,6 +1079,13 @@ export function PassportView({
         error={donateError}
         onDonate={submitDonate}
       />
+
+      {showShare ? (
+        <ShareablePoster
+          data={sharePosterData}
+          onClose={() => setShowShare(false)}
+        />
+      ) : null}
     </div>
   );
 }

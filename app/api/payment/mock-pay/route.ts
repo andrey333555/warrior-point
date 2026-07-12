@@ -41,6 +41,8 @@ export async function GET(req: Request) {
   returnUrl.searchParams.set("bookingId", intent.bookingId);
   returnUrl.searchParams.set("type", intent.trainingType);
   returnUrl.searchParams.set("trainer", intent.trainerName);
+  returnUrl.searchParams.set("gym", intent.gymName);
+  returnUrl.searchParams.set("gross", String(intent.grossRub));
 
   return NextResponse.redirect(returnUrl);
 }

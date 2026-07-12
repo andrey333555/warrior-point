@@ -7,35 +7,20 @@ export const metadata: Metadata = {
   description: "Session complete · XP, settlement и обновление паспорта",
 };
 
-type PageProps = {
-  searchParams: Promise<{
-    bookingId?: string;
-    trainerId?: string;
-    trainer?: string;
-    gym?: string;
-    gross?: string;
-    type?: string;
-    paymentId?: string;
-  }>;
-};
-
-export default async function SessionCompleteRoute({ searchParams }: PageProps) {
-  const sp = await searchParams;
-
-  const trainerId = sp.trainerId ? Number.parseInt(sp.trainerId, 10) : undefined;
-  const grossRub = sp.gross ? Number.parseInt(sp.gross, 10) : undefined;
-
+function SessionCompleteFallback() {
   return (
-    <Suspense fallback={null}>
-      <CompleteSession
-        bookingId={sp.bookingId}
-        trainerId={Number.isFinite(trainerId) ? trainerId : undefined}
-        trainerName={sp.trainer}
-        gymName={sp.gym}
-        grossRub={Number.isFinite(grossRub) ? grossRub : undefined}
-        trainingType={sp.type}
-        paymentId={sp.paymentId}
-      />
+    <div className="flex min-h-screen items-center justify-center bg-[#0A0A0A]">
+      <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.3em] text-[#C9A84C]/70">
+        Загрузка сессии…
+      </p>
+    </div>
+  );
+}
+
+export default function SessionCompleteRoute() {
+  return (
+    <Suspense fallback={<SessionCompleteFallback />}>
+      <CompleteSession />
     </Suspense>
   );
 }

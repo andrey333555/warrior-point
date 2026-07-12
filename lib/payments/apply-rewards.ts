@@ -1,6 +1,6 @@
 "use client";
 
-import { addBooking, completeBooking, BOOKING_TYPE_LABEL } from "@/lib/bookings";
+import { addBooking, completeBooking, BOOKING_TYPE_LABEL, type BookingType } from "@/lib/bookings";
 import { awardTrainingXp } from "@/lib/xp";
 import {
   creditWalletCashback,
@@ -10,10 +10,12 @@ import {
 
 type ConfirmResponse = {
   ok: boolean;
+  bookingId?: string;
   trainerId?: number;
   trainerName?: string;
   gymName?: string;
   trainingType?: string;
+  grossRub?: number;
   settlement?: {
     cashbackRub: number;
     xpAward: number;
@@ -24,6 +26,12 @@ type ConfirmResponse = {
 
 export type ApplyPaymentRewardsResult = {
   applied: boolean;
+  bookingId?: string;
+  trainerId?: number;
+  trainerName?: string;
+  gymName?: string;
+  trainingType?: BookingType;
+  grossRub?: number;
   xpAward?: number;
   cashbackRub?: number;
   trainerNetRub?: number;
@@ -73,6 +81,12 @@ export async function applyPaymentRewards(
 
   return {
     applied: true,
+    bookingId: data.bookingId,
+    trainerId: data.trainerId,
+    trainerName: data.trainerName,
+    gymName: data.gymName,
+    trainingType: typeKey,
+    grossRub: data.grossRub,
     xpAward: data.settlement.xpAward,
     cashbackRub: data.settlement.cashbackRub,
     trainerNetRub: data.settlement.trainerNetRub,
