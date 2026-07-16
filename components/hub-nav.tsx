@@ -14,13 +14,13 @@ type HubLink = {
 };
 
 const LINKS: HubLink[] = [
-  { id: "feed", href: "/", label: "Лента" },
+  { id: "feed", href: "/", label: "Главная" },
   { id: "passport", href: "/?tab=passport", label: "Паспорт" },
   { id: "leaderboard", href: "/?tab=leaderboard", label: "Топ" },
   { id: "map", href: "/map", label: "Карты", variant: "map" },
 ];
 
-const NAV_VISIBLE_ROUTES = new Set(["/", "/map", "/profile"]);
+const NAV_VISIBLE_ROUTES = new Set(["/", "/map", "/profile", "/settings"]);
 
 function normalizePath(pathname: string): string {
   if (!pathname || pathname === "/") return "/";
@@ -70,7 +70,11 @@ export function HubNav() {
 
   return (
     <nav
-      className="fixed bottom-4 left-1/2 z-[100] w-[min(100%-2rem,24rem)] -translate-x-1/2 rounded-full border border-white/[0.08] bg-black/80 px-1 py-1.5 backdrop-blur-xl shadow-[0_0_40px_-12px_rgba(34,211,238,0.45)] supports-[backdrop-filter]:bg-black/65"
+      className="fixed bottom-4 left-1/2 z-[100] w-[min(100%-2rem,24rem)] -translate-x-1/2 rounded-full border px-1 py-1.5 backdrop-blur-xl shadow-[0_0_40px_-12px_rgba(34,211,238,0.45)]"
+      style={{
+        background: "color-mix(in srgb, var(--background) 82%, transparent)",
+        borderColor: "var(--wp-border)",
+      }}
       aria-label="Warrior Point hub"
     >
       <div className="grid grid-cols-4 items-center gap-0.5">

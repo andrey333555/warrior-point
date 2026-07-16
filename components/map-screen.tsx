@@ -25,7 +25,10 @@ export default function MapScreen() {
 
   if (auth.status === "loading") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-black">
+      <div
+        className="flex min-h-screen items-center justify-center"
+        style={{ background: "var(--background)", color: "var(--foreground)" }}
+      >
         <p className="font-[family-name:var(--font-jetbrains-mono)] text-[10px] uppercase tracking-[0.3em] text-cyan-400/70">
           Загрузка карты…
         </p>
@@ -40,16 +43,31 @@ export default function MapScreen() {
   const clientId = auth.user.id;
 
   return (
-    <div className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden bg-black">
+    <div
+      className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden"
+      style={{ background: "var(--background)", color: "var(--foreground)" }}
+    >
       {/* Desktop ambient */}
-      <div className="pointer-events-none absolute inset-0 hidden sm:block">
+      <div className="wp-theme-ambience pointer-events-none absolute inset-0 hidden sm:block">
         <div className="absolute left-1/4 top-1/4 h-64 w-64 rounded-full bg-cyan-500/10 blur-[100px]" />
         <div className="absolute bottom-1/4 right-1/4 h-64 w-64 rounded-full bg-fuchsia-500/10 blur-[100px]" />
       </div>
 
-      <div className="relative flex h-[100dvh] w-full max-w-[420px] flex-col overflow-hidden border-x border-white/[0.06] bg-zinc-950 shadow-[0_0_80px_-20px_rgba(0,240,255,0.15)]">
+      <div
+        className="relative flex h-[100dvh] w-full max-w-[420px] flex-col overflow-hidden border-x shadow-[0_0_80px_-20px_rgba(0,240,255,0.15)]"
+        style={{
+          background: "var(--background)",
+          borderColor: "var(--wp-border)",
+        }}
+      >
         {/* Header */}
-        <header className="shrink-0 border-b border-white/[0.06] bg-black/80 px-4 py-3 backdrop-blur-md">
+        <header
+          className="shrink-0 border-b px-4 py-3 backdrop-blur-md"
+          style={{
+            background: "color-mix(in srgb, var(--background) 88%, transparent)",
+            borderColor: "var(--wp-border)",
+          }}
+        >
           <div className="flex items-center gap-2">
             <span
               className="h-2 w-2 shrink-0 rounded-full bg-cyan-400"

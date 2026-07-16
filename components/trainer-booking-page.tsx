@@ -59,6 +59,7 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
   );
   const [screen, setScreen] = useState<Screen>("booking");
   const [insurance, setInsurance] = useState<InsurancePlan | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const { paying, error: paymentError, pay, clearError } = usePayment();
 
   const canProceed = !!selectedGym && !!selectedDate && !!selectedTime;
@@ -69,8 +70,14 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
   const settlement = splitSettlement(trainingPrice);
 
   const handlePay = async () => {
-    if (paying || !selectedGym || !selectedTime) return;
+    if (paying) return;
+    if (!selectedGym || !selectedTime) {
+      setFormError("Выберите зал и время");
+      return;
+    }
 
+    setFormError(null);
+    clearError();
     await pay({
       fighterId,
       trainerId: trainer.id,
@@ -86,7 +93,10 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
   // ── Payment ────────────────────────────────────────────────────────────────
   if (screen === "payment") {
     return (
-      <div className="flex min-h-screen flex-col bg-black px-5 pb-24 pt-6 text-white">
+      <div
+        className="flex min-h-screen flex-col px-5 pb-24 pt-6"
+        style={{ background: "var(--background)", color: "var(--foreground)" }}
+      >
         <header className="mb-8">
           <button
             type="button"
@@ -193,6 +203,9 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
         </motion.div>
 
         <div className="mt-auto space-y-3 pt-6">
+          {formError ? (
+            <ErrorMessage message={formError} onRetry={() => setFormError(null)} />
+          ) : null}
           {paymentError ? (
             <ErrorMessage message={paymentError} onRetry={clearError} />
           ) : null}
@@ -215,7 +228,10 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
 
   // ── Booking form ───────────────────────────────────────────────────────────
   return (
-    <div className="mx-auto min-h-screen max-w-lg bg-black pb-24 text-white">
+    <div
+      className="mx-auto min-h-screen max-w-lg pb-24"
+      style={{ background: "var(--background)", color: "var(--foreground)" }}
+    >
       <header className="px-4 py-3">
         <button
           type="button"
@@ -362,7 +378,13 @@ export default function TrainerBookingPage({ trainer }: TrainerBookingPageProps)
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 border-t border-white/[0.06] bg-black/95 p-4 backdrop-blur-md">
+      <div
+        className="fixed bottom-0 left-0 right-0 border-t p-4 backdrop-blur-md"
+        style={{
+          background: "color-mix(in srgb, var(--background) 95%, transparent)",
+          borderColor: "var(--wp-border)",
+        }}
+      >
         <Button
           fullWidth
           size="lg"

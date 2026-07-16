@@ -31,7 +31,9 @@ export async function GET(req: Request) {
 
   if (intent.status !== "succeeded") {
     await updatePaymentStatus(paymentId, "succeeded");
-    await applyServerPaymentRewards(intent);
+    void applyServerPaymentRewards(intent).catch((err) => {
+      console.warn("[payments] mock-pay server rewards:", err);
+    });
   }
 
   const returnUrl = new URL(

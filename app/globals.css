@@ -1,8 +1,31 @@
 @import "tailwindcss";
 
-:root {
+:root,
+html[data-theme="dark"] {
   --background: #0a0a0a;
   --foreground: #ffffff;
+  --wp-surface: #18181b;
+  --wp-border: rgba(255, 255, 255, 0.1);
+  --wp-muted: rgba(255, 255, 255, 0.45);
+  --wp-accent: #c9a84c;
+}
+
+html[data-theme="light"] {
+  --background: #ffffff;
+  --foreground: #0a0a0a;
+  --wp-surface: #f4f4f5;
+  --wp-border: rgba(10, 10, 10, 0.1);
+  --wp-muted: rgba(10, 10, 10, 0.5);
+  --wp-accent: #c9a84c;
+}
+
+html[data-theme="hybrid"] {
+  --background: #f7f5f0;
+  --foreground: #0a0a0a;
+  --wp-surface: #ffffff;
+  --wp-border: rgba(10, 10, 10, 0.1);
+  --wp-muted: rgba(10, 10, 10, 0.48);
+  --wp-accent: #c9a84c;
 }
 
 @theme inline {
@@ -17,10 +40,141 @@
 }
 
 body {
-  background: #0a0a0a;
-  color: white;
+  background: var(--background) !important;
+  color: var(--foreground);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* ── Global theme remaps (hardcoded bg-black everywhere otherwise wins) ── */
+html[data-theme="light"],
+html[data-theme="hybrid"] {
+  --wp-card: var(--wp-surface);
+  --wp-card-border: var(--wp-border);
+}
+
+html[data-theme="light"] .bg-black,
+html[data-theme="light"] .bg-zinc-950,
+html[data-theme="light"] .bg-\[\#0A0A0A\],
+html[data-theme="light"] .bg-\[\#0a0a0a\],
+html[data-theme="light"] .bg-\[\#070710\],
+html[data-theme="hybrid"] .bg-black,
+html[data-theme="hybrid"] .bg-zinc-950,
+html[data-theme="hybrid"] .bg-\[\#0A0A0A\],
+html[data-theme="hybrid"] .bg-\[\#0a0a0a\],
+html[data-theme="hybrid"] .bg-\[\#070710\] {
+  background-color: var(--background) !important;
+}
+
+html[data-theme="light"] .bg-zinc-900,
+html[data-theme="light"] .bg-zinc-900\/80,
+html[data-theme="light"] .bg-zinc-900\/60,
+html[data-theme="hybrid"] .bg-zinc-900,
+html[data-theme="hybrid"] .bg-zinc-900\/80,
+html[data-theme="hybrid"] .bg-zinc-900\/60 {
+  background-color: var(--wp-surface) !important;
+}
+
+html[data-theme="light"] .bg-black\/80,
+html[data-theme="light"] .bg-black\/85,
+html[data-theme="light"] .bg-black\/95,
+html[data-theme="light"] .bg-black\/65,
+html[data-theme="light"] .bg-black\/50,
+html[data-theme="hybrid"] .bg-black\/80,
+html[data-theme="hybrid"] .bg-black\/85,
+html[data-theme="hybrid"] .bg-black\/95,
+html[data-theme="hybrid"] .bg-black\/65,
+html[data-theme="hybrid"] .bg-black\/50 {
+  background-color: color-mix(in srgb, var(--background) 88%, transparent) !important;
+}
+
+html[data-theme="light"] .text-white,
+html[data-theme="hybrid"] .text-white {
+  color: var(--foreground) !important;
+}
+
+html[data-theme="light"] .text-white\/50,
+html[data-theme="light"] .text-white\/40,
+html[data-theme="light"] .text-white\/35,
+html[data-theme="light"] .text-white\/30,
+html[data-theme="light"] .text-white\/60,
+html[data-theme="hybrid"] .text-white\/50,
+html[data-theme="hybrid"] .text-white\/40,
+html[data-theme="hybrid"] .text-white\/35,
+html[data-theme="hybrid"] .text-white\/30,
+html[data-theme="hybrid"] .text-white\/60 {
+  color: var(--wp-muted) !important;
+}
+
+/* Full-viewport shells with inline dark backgrounds */
+html[data-theme="light"] [style*="background: #0A0A0A"],
+html[data-theme="light"] [style*="background:#0A0A0A"],
+html[data-theme="light"] [style*="background: #0a0a0a"],
+html[data-theme="light"] [style*="background: rgb(10, 10, 10)"],
+html[data-theme="hybrid"] [style*="background: #0A0A0A"],
+html[data-theme="hybrid"] [style*="background:#0A0A0A"],
+html[data-theme="hybrid"] [style*="background: #0a0a0a"],
+html[data-theme="hybrid"] [style*="background: rgb(10, 10, 10)"] {
+  background: var(--background) !important;
+  background-color: var(--background) !important;
+}
+
+html[data-theme="light"] .text-zinc-100,
+html[data-theme="light"] .text-zinc-200,
+html[data-theme="light"] .text-zinc-300,
+html[data-theme="hybrid"] .text-zinc-100,
+html[data-theme="hybrid"] .text-zinc-200,
+html[data-theme="hybrid"] .text-zinc-300 {
+  color: color-mix(in srgb, var(--foreground) 88%, transparent) !important;
+}
+
+html[data-theme="light"] .text-gray-300,
+html[data-theme="light"] .text-gray-400,
+html[data-theme="light"] .text-neutral-300,
+html[data-theme="light"] .text-neutral-400,
+html[data-theme="hybrid"] .text-gray-300,
+html[data-theme="hybrid"] .text-gray-400,
+html[data-theme="hybrid"] .text-neutral-300,
+html[data-theme="hybrid"] .text-neutral-400 {
+  color: var(--wp-muted) !important;
+}
+
+html[data-theme="light"] .border-white\/\[0\.06\],
+html[data-theme="light"] .border-white\/\[0\.08\],
+html[data-theme="light"] .border-white\/10,
+html[data-theme="light"] .border-zinc-800,
+html[data-theme="hybrid"] .border-white\/\[0\.06\],
+html[data-theme="hybrid"] .border-white\/\[0\.08\],
+html[data-theme="hybrid"] .border-white\/10,
+html[data-theme="hybrid"] .border-zinc-800 {
+  border-color: var(--wp-border) !important;
+}
+
+/* Keep CTA / accent buttons readable on light */
+html[data-theme="light"] .bg-yellow-400,
+html[data-theme="hybrid"] .bg-yellow-400,
+html[data-theme="light"] .bg-\[\#C9A84C\],
+html[data-theme="hybrid"] .bg-\[\#C9A84C\] {
+  color: #0a0a0a !important;
+}
+
+html[data-theme="light"] .text-black,
+html[data-theme="hybrid"] .text-black {
+  color: #0a0a0a !important;
+}
+
+/* Soften neon ambience on light themes */
+html[data-theme="light"] .wp-theme-ambience,
+html[data-theme="hybrid"] .wp-theme-ambience {
+  opacity: 0.18 !important;
+  filter: saturate(0.35);
+}
+
+/* Hybrid: cream page + slightly stronger cards */
+html[data-theme="hybrid"] {
+  --background: #f7f5f0;
+  --wp-surface: #ffffff;
 }
 
 /* ── Warrior Point design tokens ── */

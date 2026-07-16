@@ -84,6 +84,8 @@ function fromRow(row: PaymentRow): PaymentIntent {
 // ── Public API (async) ───────────────────────────────────────────────────────
 
 export async function savePaymentIntent(intent: PaymentIntent): Promise<void> {
+  memStore().set(intent.id, intent);
+
   if (isServiceRoleConfigured()) {
     const client = createWarriorServiceClient();
     if (client) {
@@ -96,12 +98,14 @@ export async function savePaymentIntent(intent: PaymentIntent): Promise<void> {
       }
     }
   }
-  memStore().set(intent.id, intent);
 }
 
 export async function getPaymentIntent(
   id: string,
 ): Promise<PaymentIntent | undefined> {
+  const cached = memStore().get(id);
+  if (cached) return cached;
+
   if (isServiceRoleConfigured()) {
     const client = createWarriorServiceClient();
     if (client) {
@@ -110,10 +114,14 @@ export async function getPaymentIntent(
         .select("*")
         .eq("id", id)
         .maybeSingle();
-      if (!error) return data ? fromRow(data as PaymentRow) : undefined;
+      if (!error && data) {
+        const intent = fromRow(data as PaymentRow);
+        memStore().set(id, intent);
+        return intent;
+      }
     }
   }
-  return memStore().get(id);
+  return undefined;
 }
 
 export async function findPaymentByYookassaId(

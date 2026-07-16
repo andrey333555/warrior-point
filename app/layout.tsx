@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, JetBrains_Mono } from "next/font/google";
 import Script from "next/script";
 import { AppChrome } from "@/components/app-chrome";
 import { TelegramTheme } from "@/components/telegram-theme";
+import { ThemeProvider } from "@/components/theme-provider";
 import { StoreInit } from "@/components/StoreInit";
 import { DonateUiProvider } from "@/hooks/use-donate-ui";
 import { Providers } from "./providers";
@@ -68,9 +69,15 @@ export default function RootLayout({
         <meta name="telegram:web-app" content="1" />
         {/* Prevent iOS Safari bounce-scroll */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
+        {/* Apply saved theme before paint to avoid flash */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var r=localStorage.getItem("wp.theme.v1");var p=r?JSON.parse(r):"dark";if(["dark","light","hybrid","auto"].indexOf(p)<0)p="dark";var m=p;if(p==="auto"){var h=new Date().getHours();m=h>=7&&h<20?"light":"dark"}var el=document.documentElement;el.dataset.theme=m;el.dataset.themePref=p;el.classList.add("theme-"+m);var bg=m==="light"?"#ffffff":m==="hybrid"?"#f7f5f0":"#0a0a0a";el.style.backgroundColor=bg;document.addEventListener("DOMContentLoaded",function(){document.body.style.backgroundColor=bg})}catch(e){document.documentElement.dataset.theme="dark"}})();`,
+          }}
+        />
       </head>
       <body
-        className="min-h-full bg-[#0A0A0A] text-zinc-100 antialiased"
+        className="min-h-full bg-[var(--background)] text-[var(--foreground)] antialiased"
         style={{ WebkitTapHighlightColor: "transparent" }}
       >
         {/*
@@ -84,6 +91,7 @@ export default function RootLayout({
 
         {/* Reads Telegram theme and sets --tg-* CSS vars on :root */}
         <TelegramTheme />
+        <ThemeProvider />
 
         <StoreInit />
         <Providers>

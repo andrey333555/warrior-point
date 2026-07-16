@@ -338,7 +338,10 @@ export default function ProfilePage() {
   const totalHours = bookings.length; // 1 hr per session
 
   return (
-    <div className="mx-auto min-h-screen max-w-lg bg-black pb-[calc(5.5rem+env(safe-area-inset-bottom))] text-white">
+    <div
+      className="mx-auto min-h-screen max-w-lg pb-[calc(5.5rem+env(safe-area-inset-bottom))]"
+      style={{ background: "var(--background)", color: "var(--foreground)" }}
+    >
 
       {/* ── HEADER ── */}
       <motion.div
@@ -413,6 +416,13 @@ export default function ProfilePage() {
             className="mt-3 w-full rounded-2xl border border-yellow-400/30 bg-yellow-400/10 px-4 py-3.5 text-sm font-semibold text-yellow-400 transition hover:border-yellow-400/50 hover:bg-yellow-400/15 active:scale-[0.99]"
           >
             🎁 Пригласи друга — получи 300₽
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push("/settings")}
+            className="mt-2 w-full rounded-2xl border border-zinc-800 bg-zinc-900/80 px-4 py-3.5 text-sm font-medium text-zinc-300 transition hover:border-zinc-700 hover:text-white active:scale-[0.99]"
+          >
+            ⚙️ Настройки · тема
           </button>
         </section>
 

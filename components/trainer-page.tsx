@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
+import { useBackOrHome } from "@/hooks/use-back-or-home";
 import {
   DEFAULT_TRAINER_IMAGE,
   getGymLabelForTrainer,
@@ -290,13 +291,28 @@ export default function TrainerPage({ trainer }: TrainerPageProps) {
   const [supportOpen, setSupportOpen] = useState(false);
   const [localSupportCount, setLocalSupportCount] = useState(0);
   const router = useRouter();
+  const goBack = useBackOrHome("/map");
 
   const totalSupport = trainer.supportCount + localSupportCount;
 
   return (
     <>
-    <div className="min-h-screen bg-black pb-24 text-white">
-      <TrainerHero trainer={trainer} />
+    <div
+      className="min-h-screen pb-24"
+      style={{ background: "var(--background)", color: "var(--foreground)" }}
+    >
+      <div className="relative">
+        <header className="absolute left-0 right-0 top-0 z-30 px-4 py-3">
+          <button
+            type="button"
+            onClick={goBack}
+            className="rounded-full border border-white/10 bg-black/50 px-2.5 py-1 text-[9px] uppercase tracking-[0.16em] text-neutral-400 backdrop-blur-md transition-colors hover:border-white/20 hover:text-white"
+          >
+            ← Назад
+          </button>
+        </header>
+        <TrainerHero trainer={trainer} />
+      </div>
 
       {/* Rating + support row */}
       <div className="px-4 pt-4 pb-1">

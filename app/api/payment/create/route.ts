@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import { createFightPayment } from "@/lib/payments/create-intent";
+import { applyServerPaymentRewards } from "@/lib/payments/apply-rewards-server";
+import {
+  getPaymentIntent,
+  updatePaymentStatus,
+} from "@/lib/payments/store";
 import { validateGrossRub } from "@/lib/payments/validate-price";
 import type { BookingType } from "@/lib/bookings";
 
@@ -71,6 +76,16 @@ export async function POST(req: Request) {
 
   if (!result.ok) {
     return NextResponse.json(result, { status: 502 });
+  }
+
+  if (result.mock) {
+    await updatePaymentStatus(result.paymentId, "succeeded");
+    const intent = await getPaymentIntent(result.paymentId);
+    if (intent) {
+      void applyServerPaymentRewards(intent).catch((err) => {
+        console.warn("[payments] mock server rewards:", err);
+      });
+    }
   }
 
   return NextResponse.json({

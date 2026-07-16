@@ -19,6 +19,14 @@ import {
 } from "@/lib/levels";
 import { findTrainer } from "@/lib/network";
 import { submitFighterDonation } from "@/lib/donations-flow";
+import { getReferralState } from "@/lib/referral";
+import {
+  DEMO_FIGHTER_DISPLAY_NAME,
+  DEMO_FIGHTER_PORTRAIT,
+} from "@/lib/warrior-constants";
+import ShareablePoster, {
+  type ShareablePosterData,
+} from "@/components/ShareablePoster";
 import { ReviewModal } from "@/components/trainer-page";
 
 const TIP_PRESETS = [100, 300, 500] as const;
@@ -151,6 +159,7 @@ export default function CompleteSession() {
   );
   const [donating, setDonating] = useState(false);
   const [donated, setDonated] = useState(false);
+  const [showShare, setShowShare] = useState(false);
 
   const [xpBefore] = useState(() => getXp().total);
   const [xpAfter, setXpAfter] = useState(() => getXp().total);
@@ -295,23 +304,37 @@ export default function CompleteSession() {
     }
   };
 
-  const handleShare = async () => {
-    const text = `🥊 +${result.xpGained} XP · обогнал ${result.peopleOvertaken} бойцов · ${result.trainerName} · Warrior Point`;
-    if (typeof navigator !== "undefined" && navigator.share) {
-      try {
-        await navigator.share({ title: "Warrior Point", text });
-        return;
-      } catch {
-        // user cancelled
-      }
-    }
-    void navigator.clipboard?.writeText(text);
-  };
+  const sharePosterData = useMemo((): ShareablePosterData => {
+    const referral = getReferralState();
+    return {
+      name: DEMO_FIGHTER_DISPLAY_NAME,
+      nickname: `+${result.xpGained} XP · ${result.splitType}`,
+      photo: DEMO_FIGHTER_PORTRAIT,
+      record: `+${result.eloChange}`,
+      elo: Math.round(getXp().total * 0.45) + 1400,
+      round: result.currentRound,
+      roundLabel: result.roundLabel,
+      city: result.gymName,
+      weight: `${result.duration} мин`,
+      streak: result.newStreak,
+      winStreak: result.peopleOvertaken,
+      badges: [
+        `⚡ +${result.xpGained} XP`,
+        result.peopleOvertaken > 0
+          ? `⬆️ Обогнал ${result.peopleOvertaken}`
+          : `🔥 ${result.newStreak} дн`,
+        `🥊 ${result.trainerName}`,
+      ],
+      isNewcomer: false,
+      monthSessions: result.monthSessions,
+      referralCode: referral.referralCode,
+    };
+  }, [result]);
 
   return (
     <div
       className="relative flex min-h-screen flex-col overflow-hidden"
-      style={{ background: "#0A0A0A" }}
+      style={{ background: "var(--background)", color: "var(--foreground)" }}
     >
       <div
         className="pointer-events-none absolute left-1/2 top-0 h-96 w-96 -translate-x-1/2 rounded-full"
@@ -550,12 +573,12 @@ export default function CompleteSession() {
 
           <button
             type="button"
-            onClick={() => void handleShare()}
-            className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-medium"
+            onClick={() => setShowShare(true)}
+            className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-semibold transition active:scale-[0.98]"
             style={{
-              background: "rgba(255,255,255,0.05)",
-              color: "#fff",
-              border: "0.5px solid rgba(255,255,255,0.1)",
+              background: "rgba(201,168,76,0.15)",
+              color: "#C9A84C",
+              border: "0.5px solid rgba(201,168,76,0.35)",
             }}
           >
             📤 Поделиться результатом
@@ -585,6 +608,14 @@ export default function CompleteSession() {
           trainerId={resolvedTrainerId}
           trainerName={resolvedName}
           onClose={() => setReviewOpen(false)}
+        />
+      ) : null}
+
+      {showShare ? (
+        <ShareablePoster
+          title="Поделиться результатом"
+          data={sharePosterData}
+          onClose={() => setShowShare(false)}
         />
       ) : null}
 

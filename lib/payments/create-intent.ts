@@ -92,13 +92,10 @@ export async function createFightPayment(
     }
   }
 
-  const mockUrl = new URL("/api/payment/mock-pay", origin);
-  mockUrl.searchParams.set("paymentId", paymentId);
-
   return {
     ok: true,
     paymentId,
-    confirmationUrl: mockUrl.toString(),
+    confirmationUrl: returnUrl.toString(),
     breakdown,
     mock: true,
   };

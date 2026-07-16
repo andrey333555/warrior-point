@@ -250,9 +250,12 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
       };
 
   return (
-    <div className="relative h-[100dvh] w-full overflow-hidden bg-black">
-      {/* ── Desktop ambient: deep black + soft blurred cyan/magenta blobs ── */}
-      <div aria-hidden className="pointer-events-none fixed inset-0">
+    <div
+      className="relative h-[100dvh] w-full overflow-hidden"
+      style={{ background: "var(--background)", color: "var(--foreground)" }}
+    >
+      {/* ── Desktop ambient: soft blobs (dimmed on light themes via CSS) ── */}
+      <div aria-hidden className="wp-theme-ambience pointer-events-none fixed inset-0">
         <div
           className="absolute -left-32 -top-32 h-[42rem] w-[42rem] rounded-full bg-cyan-500/20 blur-[120px]"
         />
@@ -265,11 +268,18 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
       </div>
 
       {/* ── Phone frame (max-w-420, centred) ──────────────────────────────── */}
-      <div className="relative mx-auto flex h-[100dvh] max-w-[420px] flex-col overflow-hidden border-x border-white/[0.06] bg-[#070710] text-zinc-100 shadow-[0_0_80px_-20px_rgba(0,240,255,0.3)]">
+      <div
+        className="relative mx-auto flex h-[100dvh] max-w-[420px] flex-col overflow-hidden border-x shadow-[0_0_80px_-20px_rgba(0,240,255,0.3)]"
+        style={{
+          background: "var(--background)",
+          color: "var(--foreground)",
+          borderColor: "var(--wp-border)",
+        }}
+      >
       {/* Ambient cyber-loft grid */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.04]"
+        className="wp-theme-ambience pointer-events-none absolute inset-0 opacity-[0.04]"
         style={{
           backgroundImage:
             "linear-gradient(rgba(0,240,255,0.6) 1px, transparent 1px)," +
@@ -277,7 +287,7 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
           backgroundSize: "44px 44px",
         }}
       />
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-cyan-500/[0.04] via-transparent to-fuchsia-500/[0.06]" />
+      <div className="wp-theme-ambience pointer-events-none absolute inset-0 bg-gradient-to-b from-cyan-500/[0.04] via-transparent to-fuchsia-500/[0.06]" />
 
       <FeedLayout
         category={category}
