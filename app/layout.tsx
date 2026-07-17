@@ -72,7 +72,7 @@ export default function RootLayout({
         {/* Apply saved theme before paint to avoid flash */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var r=localStorage.getItem("wp.theme.v1");var p=r?JSON.parse(r):"dark";if(["dark","light","hybrid","auto"].indexOf(p)<0)p="dark";var m=p;if(p==="auto"){var h=new Date().getHours();m=h>=7&&h<20?"light":"dark"}var el=document.documentElement;el.dataset.theme=m;el.dataset.themePref=p;el.classList.add("theme-"+m);var bg=m==="light"?"#ffffff":m==="hybrid"?"#f7f5f0":"#0a0a0a";el.style.backgroundColor=bg;document.addEventListener("DOMContentLoaded",function(){document.body.style.backgroundColor=bg})}catch(e){document.documentElement.dataset.theme="dark"}})();`,
+            __html: `(function(){try{var r=localStorage.getItem("wp.theme.v1");var p=r?JSON.parse(r):"dark";if(["dark","light","hybrid","auto"].indexOf(p)<0)p="dark";var m=p;if(p==="auto"){var h=new Date().getHours();m=h>=7&&h<20?"light":"dark"}var el=document.documentElement;el.dataset.theme=m;el.dataset.themePref=p;el.classList.add("theme-"+m);el.style.backgroundColor=m==="light"?"#ffffff":m==="hybrid"?"#f7f5f0":"#0a0a0a"}catch(e){document.documentElement.dataset.theme="dark"}})();`,
           }}
         />
       </head>

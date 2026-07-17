@@ -72,12 +72,6 @@ export function applyThemeToDocument(pref: ThemePreference = getThemePreference(
     mode === "light" || mode === "hybrid" ? "light" : "dark";
   root.classList.remove("theme-dark", "theme-light", "theme-hybrid");
   root.classList.add(`theme-${mode}`);
-  document.body.style.backgroundColor = getComputedStyle(root)
-    .getPropertyValue("--background")
-    .trim();
-  document.body.style.color = getComputedStyle(root)
-    .getPropertyValue("--foreground")
-    .trim();
 }
 
 export function subscribeTheme(listener: Listener): () => void {
