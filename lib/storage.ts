@@ -56,6 +56,7 @@ export const STORAGE_KEYS = {
   calibration: "wp.calibration.v1",
   trainerFavorites: "wp.trainers.favorites.v1",
   theme: "wp.theme.v1",
+  privacy: "wp.profile.privacy.v1",
   chat: (trainerId: number) => `wp.chat.${trainerId}.v1`,
 } as const;
 

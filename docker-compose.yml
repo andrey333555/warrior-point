@@ -1,0 +1,15 @@
+# Local / RF VM stack (Selectel · Yandex Cloud)
+# Usage: docker compose up --build
+# Provide secrets via .env (never commit).
+
+services:
+  web:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.local
+    environment:
+      - NODE_ENV=production
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+    restart: unless-stopped

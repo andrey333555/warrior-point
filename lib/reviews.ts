@@ -1,5 +1,10 @@
 "use client";
 
+/**
+ * Client reviews (localStorage). Supabase table stub: migrations/0017_reviews_stub.sql
+ * Wire UI → public.reviews in a follow-up sprint.
+ */
+
 import { useEffect, useState } from "react";
 import { saveData, loadData, STORAGE_KEYS } from "@/lib/storage";
 import { clientInitial } from "@/lib/client-store";

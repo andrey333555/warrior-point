@@ -228,7 +228,7 @@ export default function HomeHub() {
         <div className="relative space-y-2 px-4">
           <button
             type="button"
-            onClick={() => router.push("/map")}
+            onClick={() => router.push("/booking")}
             className="relative w-full overflow-hidden rounded-3xl p-5 text-left"
             style={{
               background: "rgba(201,168,76,0.85)",

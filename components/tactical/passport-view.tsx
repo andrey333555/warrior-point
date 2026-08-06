@@ -974,6 +974,12 @@ export function PassportView({
             📤 Поделиться
           </button>
         </div>
+        <Link
+          href="/fighter/kolesnik"
+          className={`mt-2 flex w-full items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] py-2.5 font-[family-name:var(--font-jetbrains-mono)] text-[10px] font-semibold uppercase tracking-[0.12em] text-neutral-400 ${EASE} hover:bg-white/[0.07] hover:text-white`}
+        >
+          Публичная ссылка · /fighter/kolesnik
+        </Link>
       </motion.div>
 
       <motion.div {...sectionMotion(0.06)}>
