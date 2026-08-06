@@ -7,8 +7,10 @@ import {
   type PrivacyPatch,
   type ProfileVisibility,
 } from "@/lib/fighter-public";
+import { canEditProfilePrivacy } from "@/lib/api-actor";
 
 type Body = {
+  actorId?: string;
   profileId?: string;
   bookingEnabled?: boolean;
   visibility?: string;
@@ -29,11 +31,24 @@ function client() {
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const profileId = url.searchParams.get("profileId")?.trim();
+  const actorId = url.searchParams.get("actorId")?.trim();
   if (!profileId) {
     return NextResponse.json(
       { ok: false, message: "profileId обязателен" },
       { status: 400 },
     );
+  }
+
+  // Read: own profile or public fields — still require actorId for write-path symmetry
+  // when loading settings UI (own only).
+  if (actorId && actorId !== profileId) {
+    const gate = await canEditProfilePrivacy({ actorId, profileId });
+    if (!gate.ok) {
+      return NextResponse.json(
+        { ok: false, message: gate.message },
+        { status: gate.status },
+      );
+    }
   }
 
   const sb = client();
@@ -103,6 +118,17 @@ export async function POST(req: Request) {
     return NextResponse.json(
       { ok: false, message: "profileId обязателен" },
       { status: 400 },
+    );
+  }
+
+  const gate = await canEditProfilePrivacy({
+    actorId: body.actorId,
+    profileId,
+  });
+  if (!gate.ok) {
+    return NextResponse.json(
+      { ok: false, message: gate.message },
+      { status: gate.status },
     );
   }
 

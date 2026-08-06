@@ -11,7 +11,7 @@ import type { WarriorRole } from "@/lib/roles";
 import { DonateModal } from "@/components/donate-modal";
 import { submitFighterDonation } from "@/lib/donations-flow";
 import { useWarriorAuth } from "@/hooks/use-warrior-auth";
-import { DEMO_FIGHTER_DB_ID } from "@/lib/warrior-constants";
+import { resolveBookingHref } from "@/lib/fighter-booking";
 
 type Props = {
   profile: FighterPublicProfile;
@@ -154,7 +154,7 @@ export default function FighterPublicPage({ profile, viewerRole }: Props) {
 
       {view.showBooking ? (
         <Link
-          href={`/booking/${profile.id === DEMO_FIGHTER_DB_ID ? 1 : 1}`}
+          href={resolveBookingHref(profile.id)}
           className="mb-3 flex w-full items-center justify-between rounded-2xl px-4 py-4 text-left"
           style={{ background: "rgba(201,168,76,0.9)", color: "#0A0A0A" }}
         >

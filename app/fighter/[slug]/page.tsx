@@ -4,6 +4,7 @@ import { createWarriorBrowserClient } from "@/lib/supabase/client";
 import {
   fetchFighterBySlug,
   getDemoFighterBySlug,
+  redactFighterForAnonymous,
 } from "@/lib/fighter-public";
 import { createWarriorServiceClient } from "@/lib/supabase/server-admin";
 
@@ -19,11 +20,15 @@ async function loadProfile(slug: string) {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const profile = (await loadProfile(slug)) ?? getDemoFighterBySlug(slug);
+  const safe = profile ? redactFighterForAnonymous(profile) : null;
   return {
-    title: profile
-      ? `${profile.displayName} · Warrior Point`
+    title: safe
+      ? `${safe.displayName} · Warrior Point`
       : "Боец · Warrior Point",
-    description: profile?.bio ?? "Публичная карточка бойца Round 23",
+    description:
+      safe?.visibility === "public" && safe.bio
+        ? safe.bio
+        : "Публичная карточка бойца Round 23",
   };
 }
 
@@ -48,5 +53,7 @@ export default async function FighterSlugPage({ params }: Props) {
     );
   }
 
-  return <FighterPublicGate profile={profile} />;
+  // SSR never ships private/limited PII in the HTML payload.
+  const publicSafe = redactFighterForAnonymous(profile);
+  return <FighterPublicGate profile={publicSafe} slug={slug} />;
 }

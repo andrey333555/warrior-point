@@ -51,7 +51,9 @@ export default function SettingsPage() {
     setHideRecord(local.hideRecord);
     if (local.slug) setSlug(local.slug);
 
-    void fetch(`/api/profile/privacy?profileId=${encodeURIComponent(profileId)}`)
+    void fetch(
+      `/api/profile/privacy?profileId=${encodeURIComponent(profileId)}&actorId=${encodeURIComponent(profileId)}`,
+    )
       .then((r) => r.json())
       .then((data: {
         ok?: boolean;
@@ -100,7 +102,7 @@ export default function SettingsPage() {
       const res = await fetch("/api/profile/privacy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profileId, ...payload }),
+        body: JSON.stringify({ actorId: profileId, profileId, ...payload }),
       });
       const data = (await res.json()) as { ok?: boolean; message?: string };
       if (!data.ok) {

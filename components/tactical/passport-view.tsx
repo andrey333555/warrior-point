@@ -719,6 +719,45 @@ function LastFightPreview({
   );
 }
 
+function PublicFighterLink({ fighterId }: { fighterId?: string }) {
+  const [href, setHref] = useState("/fighter/kolesnik");
+  const [label, setLabel] = useState("/fighter/kolesnik");
+
+  useEffect(() => {
+    if (!fighterId) return;
+    let cancelled = false;
+    void fetch(
+      `/api/profile/privacy?profileId=${encodeURIComponent(fighterId)}&actorId=${encodeURIComponent(fighterId)}`,
+    )
+      .then((r) => r.json())
+      .then((data: { ok?: boolean; privacy?: { slug?: string | null } }) => {
+        if (cancelled) return;
+        const slug =
+          (data.ok && data.privacy?.slug?.trim()) ||
+          (fighterId === "WP-INTL-X9-441K" ? "kolesnik" : null);
+        if (slug) {
+          setHref(`/fighter/${slug}`);
+          setLabel(`/fighter/${slug}`);
+        }
+      })
+      .catch(() => {
+        /* keep default */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fighterId]);
+
+  return (
+    <Link
+      href={href}
+      className={`mt-2 flex w-full items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] py-2.5 font-[family-name:var(--font-jetbrains-mono)] text-[10px] font-semibold uppercase tracking-[0.12em] text-neutral-400 ${EASE} hover:bg-white/[0.07] hover:text-white`}
+    >
+      Публичная ссылка · {label}
+    </Link>
+  );
+}
+
 // ── View ────────────────────────────────────────────────────────────────────
 
 export function PassportView({
@@ -974,12 +1013,7 @@ export function PassportView({
             📤 Поделиться
           </button>
         </div>
-        <Link
-          href="/fighter/kolesnik"
-          className={`mt-2 flex w-full items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] py-2.5 font-[family-name:var(--font-jetbrains-mono)] text-[10px] font-semibold uppercase tracking-[0.12em] text-neutral-400 ${EASE} hover:bg-white/[0.07] hover:text-white`}
-        >
-          Публичная ссылка · /fighter/kolesnik
-        </Link>
+        <PublicFighterLink fighterId={fighterId} />
       </motion.div>
 
       <motion.div {...sectionMotion(0.06)}>

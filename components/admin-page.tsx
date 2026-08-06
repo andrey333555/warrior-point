@@ -31,7 +31,7 @@ export default function AdminPage() {
     setError(null);
     try {
       const res = await fetch(
-        `/api/admin/profiles?actorId=${encodeURIComponent(actorId)}&admin=1`,
+        `/api/admin/profiles?actorId=${encodeURIComponent(actorId)}`,
       );
       const data = (await res.json()) as {
         ok?: boolean;
@@ -136,9 +136,9 @@ export default function AdminPage() {
         <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm">
           <p>{error}</p>
           <p className="mt-2 text-xs text-white/40">
-            Подсказка: откройте{" "}
-            <code className="text-[#C9A84C]">/admin?admin=1</code> или роль
-            admin/coach в профиле.
+            Нужна роль admin/coach в Supabase или{" "}
+            <code className="text-[#C9A84C]">NEXT_PUBLIC_WARRIOR_ADMIN=1</code>{" "}
+            в env.
           </p>
         </div>
       ) : (

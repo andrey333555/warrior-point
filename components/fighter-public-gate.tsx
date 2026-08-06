@@ -9,12 +9,15 @@ import { useWarriorAuth } from "@/hooks/use-warrior-auth";
 import { createWarriorBrowserClient } from "@/lib/supabase/client";
 
 export default function FighterPublicGate({
-  profile,
+  profile: initial,
+  slug,
 }: {
   profile: FighterPublicProfile;
+  slug: string;
 }) {
   const auth = useWarriorAuth();
   const [viewerRole, setViewerRole] = useState<WarriorRole | null>(null);
+  const [profile, setProfile] = useState(initial);
 
   useEffect(() => {
     if (auth.status !== "authenticated") {
@@ -39,6 +42,26 @@ export default function FighterPublicGate({
       cancelled = true;
     };
   }, [auth]);
+
+  // Privileged viewers re-fetch full card (SSR shipped redacted payload).
+  useEffect(() => {
+    if (viewerRole !== "admin" && viewerRole !== "coach") return;
+    if (auth.status !== "authenticated") return;
+    let cancelled = false;
+    void fetch(
+      `/api/fighter/${encodeURIComponent(slug)}?actorId=${encodeURIComponent(auth.user.id)}`,
+    )
+      .then((r) => r.json())
+      .then((data: { ok?: boolean; profile?: FighterPublicProfile }) => {
+        if (!cancelled && data.ok && data.profile) setProfile(data.profile);
+      })
+      .catch(() => {
+        /* keep SSR payload */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [viewerRole, auth, slug]);
 
   return <FighterPublicPage profile={profile} viewerRole={viewerRole} />;
 }

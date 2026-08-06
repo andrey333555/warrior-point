@@ -282,6 +282,11 @@ export async function handleDonate(
   const { error: insertErr, id: donationId } = await resilientInsert(client, "donations", {
     donor_id: donorId,
     recipient_id: recipientId,
+    fighter_id: recipientId,
+    amount: breakdown.gross * 100,
+    currency: "RUB",
+    status: "paid",
+    message: trimmedComment,
     gross_amount: breakdown.gross,
     platform_fee: breakdown.platformFee,
     net_amount: breakdown.net,
@@ -291,6 +296,8 @@ export async function handleDonate(
   if (insertErr) {
     return { ok: false, code: "DB_ERROR", message: insertErr.message };
   }
+
+  await bumpDonationsTotal(client, recipientId, breakdown.gross);
 
   return {
     ok: true,
@@ -351,6 +358,12 @@ export async function handleGuestSbpDonate(
   const { error: insertErr, id: donationId } = await resilientInsert(client, "donations", {
     donor_id: guestDonorId,
     recipient_id: recipientId,
+    fighter_id: recipientId,
+    amount: breakdown.gross * 100,
+    currency: "RUB",
+    status: "paid",
+    message: trimmedComment,
+    supporter_name: "Гость",
     gross_amount: breakdown.gross,
     platform_fee: breakdown.platformFee,
     net_amount: breakdown.net,
@@ -361,10 +374,36 @@ export async function handleGuestSbpDonate(
     return { ok: false, code: "DB_ERROR", message: insertErr.message };
   }
 
+  await bumpDonationsTotal(client, recipientId, breakdown.gross);
+
   return {
     ok: true,
     donationId: donationId ?? "",
     newDonorBalance: 0,
     breakdown,
   };
+}
+
+/** Increment profiles.donations_total (kopecks). Idempotent-safe via read+add. */
+async function bumpDonationsTotal(
+  client: SupabaseClient,
+  recipientId: string,
+  grossRub: number,
+): Promise<void> {
+  const deltaKop = Math.round(grossRub * 100);
+  if (deltaKop <= 0) return;
+
+  const { data } = await client
+    .from("profiles")
+    .select("donations_total")
+    .eq("id", recipientId)
+    .maybeSingle();
+
+  const current = num(data?.donations_total);
+  await resilientUpdate(
+    client,
+    "profiles",
+    { id: recipientId },
+    { donations_total: current + deltaKop },
+  );
 }

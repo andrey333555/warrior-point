@@ -2,45 +2,31 @@ import { NextResponse } from "next/server";
 import { createWarriorServiceClient } from "@/lib/supabase/server-admin";
 import { createWarriorBrowserClient } from "@/lib/supabase/client";
 import { isWarriorRole, resolveWarriorRole } from "@/lib/roles";
-import { isWarriorAdminMode } from "@/lib/admin";
+import { canAccessAdmin } from "@/lib/api-actor";
 import { DEMO_FIGHTER_DB_ID } from "@/lib/warrior-constants";
 
 function client() {
   return createWarriorServiceClient() ?? createWarriorBrowserClient();
 }
 
-/** List profiles for admin / coach (read-only for coach). */
+/** List profiles — admin/coach from DB role, or NEXT_PUBLIC_WARRIOR_ADMIN=1. */
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const actorId = url.searchParams.get("actorId")?.trim();
-  const adminGate =
-    isWarriorAdminMode() || url.searchParams.get("admin") === "1";
 
-  const sb = client();
-  let actorRole: ReturnType<typeof resolveWarriorRole> | null = null;
-
-  if (sb && actorId) {
-    const { data } = await sb
-      .from("profiles")
-      .select("role")
-      .eq("id", actorId)
-      .maybeSingle();
-    if (data) actorRole = resolveWarriorRole(data.role);
-  }
-
-  const allowed =
-    adminGate || actorRole === "admin" || actorRole === "coach";
-  if (!allowed) {
+  const gate = await canAccessAdmin({ actorId, write: false });
+  if (!gate.ok) {
     return NextResponse.json(
-      { ok: false, message: "Нет доступа" },
-      { status: 403 },
+      { ok: false, message: gate.message },
+      { status: gate.status },
     );
   }
 
+  const sb = client();
   if (!sb) {
     return NextResponse.json({
       ok: true,
-      canDelete: adminGate || actorRole === "admin",
+      canDelete: gate.canDelete,
       profiles: [
         {
           id: DEMO_FIGHTER_DB_ID,
@@ -71,7 +57,7 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     ok: true,
-    canDelete: adminGate || actorRole === "admin",
+    canDelete: gate.canDelete,
     profiles: (data ?? []).map((row) => ({
       id: row.id as string,
       displayName:
@@ -88,7 +74,6 @@ export async function GET(req: Request) {
   });
 }
 
-/** Soft-delete stub — admin only. Marks role stay; real delete is TODO harden. */
 export async function DELETE(req: Request) {
   let body: { actorId?: string; profileId?: string; confirm?: boolean };
   try {
@@ -104,32 +89,20 @@ export async function DELETE(req: Request) {
     );
   }
 
-  const sb = client();
-  const adminGate = isWarriorAdminMode();
-  let isAdmin = adminGate;
-
-  if (sb && body.actorId) {
-    const { data } = await sb
-      .from("profiles")
-      .select("role")
-      .eq("id", body.actorId)
-      .maybeSingle();
-    isAdmin = isAdmin || resolveWarriorRole(data?.role) === "admin";
-  }
-
-  if (!isAdmin) {
+  const gate = await canAccessAdmin({ actorId: body.actorId, write: true });
+  if (!gate.ok || !gate.canDelete) {
     return NextResponse.json(
-      { ok: false, message: "Только admin" },
-      { status: 403 },
+      { ok: false, message: gate.ok ? "Только admin" : gate.message },
+      { status: gate.ok ? 403 : gate.status },
     );
   }
 
-  // Scaffold: do not hard-delete PII yet — flag via fighter_status
+  const sb = client();
   if (!sb) {
     return NextResponse.json({
       ok: true,
       mock: true,
-      message: "Удаление stub (demo). На проде — серверный hard-delete + аудит.",
+      message: "Удаление stub (demo).",
     });
   }
 
@@ -152,11 +125,10 @@ export async function DELETE(req: Request) {
 
   return NextResponse.json({
     ok: true,
-    message: "Профиль помечен как Deleted (soft). Hard-delete — backlog.",
+    message: "Профиль помечен как Deleted (soft).",
   });
 }
 
-/** Role change stub — service role only path. */
 export async function PATCH(req: Request) {
   let body: { actorId?: string; profileId?: string; role?: string };
   try {
@@ -172,26 +144,23 @@ export async function PATCH(req: Request) {
     );
   }
 
-  const sb = createWarriorServiceClient();
-  if (!sb) {
-    return NextResponse.json({
-      ok: false,
-      message: "Нужен SUPABASE_SERVICE_ROLE_KEY для смены роли",
-    }, { status: 503 });
+  const gate = await canAccessAdmin({ actorId: body.actorId, write: true });
+  if (!gate.ok || !gate.canDelete) {
+    return NextResponse.json(
+      { ok: false, message: gate.ok ? "Только admin" : gate.message },
+      { status: gate.ok ? 403 : gate.status },
+    );
   }
 
-  const adminGate = isWarriorAdminMode();
-  let isAdmin = adminGate;
-  if (body.actorId) {
-    const { data } = await sb
-      .from("profiles")
-      .select("role")
-      .eq("id", body.actorId)
-      .maybeSingle();
-    isAdmin = isAdmin || resolveWarriorRole(data?.role) === "admin";
-  }
-  if (!isAdmin) {
-    return NextResponse.json({ ok: false, message: "Только admin" }, { status: 403 });
+  const sb = createWarriorServiceClient();
+  if (!sb) {
+    return NextResponse.json(
+      {
+        ok: false,
+        message: "Нужен SUPABASE_SERVICE_ROLE_KEY для смены роли",
+      },
+      { status: 503 },
+    );
   }
 
   const { error } = await sb

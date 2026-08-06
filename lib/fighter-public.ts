@@ -4,7 +4,6 @@ import { resolveWarriorRole } from "@/lib/roles";
 import {
   DEMO_FIGHTER_CLUB,
   DEMO_FIGHTER_DB_ID,
-  DEMO_FIGHTER_FULL_NAME,
   DEMO_FIGHTER_PORTRAIT,
   DEMO_FIGHTER_WEIGHT_CLASS,
 } from "@/lib/warrior-constants";
@@ -145,9 +144,9 @@ export function getDemoFighterBySlug(
   return {
     id: DEMO_FIGHTER_DB_ID,
     slug: "kolesnik",
-    displayName: DEMO_FIGHTER_FULL_NAME,
+    displayName: "Виктор Колесник",
     role: "fighter",
-    bio: "Профессиональный боец ММА. Промоушены: ACA, RCC, M-1 Global.",
+    bio: "Профессиональный боец ММА. Промоушены: ACA, RCC, M-1 Global, Marathon 360. Базовый зал — БК «Кузня».",
     avatarUrl: DEMO_FIGHTER_PORTRAIT,
     record: "27-4-1",
     club: DEMO_FIGHTER_CLUB,
@@ -160,6 +159,30 @@ export function getDemoFighterBySlug(
     hideBio: false,
     hideRecord: false,
     verificationStatus: "none",
+  };
+}
+
+/** Strip PII for anonymous SSR / private·limited public cards. */
+export function redactFighterForAnonymous(
+  profile: FighterPublicProfile,
+): FighterPublicProfile {
+  if (profile.visibility === "public") {
+    return {
+      ...profile,
+      bio: profile.hideBio ? null : profile.bio,
+      club: profile.hideClub ? null : profile.club,
+      weightClass: profile.hideWeightClass ? null : profile.weightClass,
+      record: profile.hideRecord ? null : profile.record,
+    };
+  }
+
+  return {
+    ...profile,
+    bio: null,
+    club: null,
+    weightClass: null,
+    record: null,
+    bookingEnabled: false,
   };
 }
 
@@ -198,7 +221,23 @@ export async function fetchFighterBySlug(
 
   if (!error && data && typeof data === "object") {
     const mapped = mapRow(data as unknown as Record<string, unknown>);
-    if (mapped) return mapped;
+    if (mapped) {
+      // Fill empty public card fields from showcase demo (until 0018 seed applied).
+      if (normalized === "kolesnik") {
+        const demo = getDemoFighterBySlug("kolesnik")!;
+        return {
+          ...mapped,
+          bio: mapped.bio ?? demo.bio,
+          record: mapped.record ?? demo.record,
+          avatarUrl: mapped.avatarUrl ?? demo.avatarUrl,
+          club: mapped.club ?? demo.club,
+          weightClass: mapped.weightClass ?? demo.weightClass,
+          displayName:
+            mapped.displayName === "Боец" ? demo.displayName : mapped.displayName,
+        };
+      }
+      return mapped;
+    }
   }
 
   // Fallback: slug column missing — try demo id for kolesnik
