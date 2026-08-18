@@ -140,13 +140,13 @@ function mapRow(row: Record<string, unknown>): FighterPublicProfile | null {
 export function getDemoFighterBySlug(
   slug: string,
 ): FighterPublicProfile | null {
-  if (slug !== "kolesnik") return null;
+  if (slug !== "king") return null;
   return {
     id: DEMO_FIGHTER_DB_ID,
-    slug: "kolesnik",
-    displayName: "Виктор Колесник",
+    slug: "king",
+    displayName: "King León",
     role: "fighter",
-    bio: "Профессиональный боец ММА. Промоушены: ACA, RCC, M-1 Global, Marathon 360. Базовый зал — БК «Кузня».",
+    bio: "Демо-боец платформы Round 23. Промоушены: ACA, RCC, M-1 Global. Базовый зал — БК «Кузня».",
     avatarUrl: DEMO_FIGHTER_PORTRAIT,
     record: "27-4-1",
     club: DEMO_FIGHTER_CLUB,
@@ -190,7 +190,8 @@ export async function fetchFighterBySlug(
   client: SupabaseClient,
   slug: string,
 ): Promise<FighterPublicProfile | null> {
-  const normalized = slug.trim().toLowerCase();
+  const normalizedRaw = slug.trim().toLowerCase();
+  const normalized = normalizedRaw;
   if (!normalized) return null;
 
   const { data, error } = await client
@@ -222,26 +223,29 @@ export async function fetchFighterBySlug(
   if (!error && data && typeof data === "object") {
     const mapped = mapRow(data as unknown as Record<string, unknown>);
     if (mapped) {
-      // Fill empty public card fields from showcase demo (until 0018 seed applied).
-      if (normalized === "kolesnik") {
-        const demo = getDemoFighterBySlug("kolesnik")!;
+      // Fill empty public card fields from showcase demo.
+      if (normalized === "king" || mapped.id === DEMO_FIGHTER_DB_ID) {
+        const demo = getDemoFighterBySlug("king")!;
         return {
           ...mapped,
+          slug: mapped.slug || "king",
           bio: mapped.bio ?? demo.bio,
           record: mapped.record ?? demo.record,
           avatarUrl: mapped.avatarUrl ?? demo.avatarUrl,
           club: mapped.club ?? demo.club,
           weightClass: mapped.weightClass ?? demo.weightClass,
           displayName:
-            mapped.displayName === "Боец" ? demo.displayName : mapped.displayName,
+            mapped.displayName === "Боец" || !mapped.displayName.trim()
+              ? demo.displayName
+              : mapped.displayName,
         };
       }
       return mapped;
     }
   }
 
-  // Fallback: slug column missing — try demo id for kolesnik
-  if (normalized === "kolesnik") {
+  // Fallback: slug column missing — resolve demo fighter by id
+  if (normalized === "king") {
     const { data: byId } = await client
       .from("profiles")
       .select("id, display_name, role, bio, club, weight_class")
@@ -249,13 +253,12 @@ export async function fetchFighterBySlug(
       .maybeSingle();
 
     if (byId) {
-      const base = getDemoFighterBySlug("kolesnik")!;
+      const base = getDemoFighterBySlug("king")!;
+      const rawName =
+        typeof byId.display_name === "string" ? byId.display_name : "";
       return {
         ...base,
-        displayName:
-          typeof byId.display_name === "string" && byId.display_name
-            ? byId.display_name
-            : base.displayName,
+        displayName: rawName.trim() ? rawName : base.displayName,
         bio: typeof byId.bio === "string" ? byId.bio : base.bio,
         club: typeof byId.club === "string" ? byId.club : base.club,
         weightClass:

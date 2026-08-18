@@ -1,7 +1,9 @@
 "use client";
 
+import { Suspense } from "react";
 import { motion } from "framer-motion";
 import { AuthView } from "@/components/auth/AuthView";
+import InviteWelcome from "@/components/invite-welcome";
 
 export function AuthGate() {
   return (
@@ -15,6 +17,10 @@ export function AuthGate() {
       </div>
 
       <AuthView />
+
+      <Suspense fallback={null}>
+        <InviteWelcome variant="modal" />
+      </Suspense>
     </main>
   );
 }

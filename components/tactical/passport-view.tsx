@@ -720,8 +720,8 @@ function LastFightPreview({
 }
 
 function PublicFighterLink({ fighterId }: { fighterId?: string }) {
-  const [href, setHref] = useState("/fighter/kolesnik");
-  const [label, setLabel] = useState("/fighter/kolesnik");
+  const [href, setHref] = useState("/fighter/king");
+  const [label, setLabel] = useState("/fighter/king");
 
   useEffect(() => {
     if (!fighterId) return;
@@ -732,9 +732,9 @@ function PublicFighterLink({ fighterId }: { fighterId?: string }) {
       .then((r) => r.json())
       .then((data: { ok?: boolean; privacy?: { slug?: string | null } }) => {
         if (cancelled) return;
-        const slug =
+        let slug =
           (data.ok && data.privacy?.slug?.trim()) ||
-          (fighterId === "WP-INTL-X9-441K" ? "kolesnik" : null);
+          (fighterId === "WP-INTL-X9-441K" ? "king" : null);
         if (slug) {
           setHref(`/fighter/${slug}`);
           setLabel(`/fighter/${slug}`);
@@ -1010,7 +1010,7 @@ export function PassportView({
             onClick={() => setShowShare(true)}
             className={`rounded-xl border border-[#C9A84C]/25 bg-[#C9A84C]/10 py-2.5 text-center font-[family-name:var(--font-jetbrains-mono)] text-[10px] font-semibold uppercase tracking-[0.12em] text-[#C9A84C] ${EASE} hover:bg-[#C9A84C]/20`}
           >
-            📤 Поделиться
+            Позвать в Round 23
           </button>
         </div>
         <PublicFighterLink fighterId={fighterId} />

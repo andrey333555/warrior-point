@@ -1,4 +1,4 @@
--- Warrior Point · Migration 0004 — Viktor Kolesnik pro profile + extended columns
+-- Warrior Point · Migration 0004 — Demo fighter pro profile + extended columns
 -- Run in: Supabase Dashboard → SQL Editor → New query → Run
 -- Idempotent: safe to re-run multiple times.
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -29,7 +29,7 @@ ON CONFLICT (id) DO UPDATE
       fighter_status = 'Coach',
       updated_at     = NOW();
 
--- ── Step 3: Update Viktor Kolesnik — full pro profile ────────────────────────
+-- ── Step 3: Update demo fighter — full pro profile ───────────────────────────
 -- XP = 5200 → Level 12 "Journeyman Pro" (threshold at 4869).
 -- monthly_xp = 650 — active training cycle (последние 30 дней).
 -- current_status: displayed in the pink sotka on the Warrior Passport.
@@ -40,7 +40,7 @@ INSERT INTO public.profiles (
 )
 VALUES (
   'WP-INTL-X9-441K',
-  'Виктор Колесник',
+  'King León',
   'fighter',
   'WP-COACH-001',
   'БК «Кузня» (Анапа / Краснодар)',
@@ -49,7 +49,7 @@ VALUES (
   'Pro'
 )
 ON CONFLICT (id) DO UPDATE
-  SET display_name   = 'Виктор Колесник',
+  SET display_name   = 'King León',
       role           = 'fighter',
       coach_id       = 'WP-COACH-001',
       club           = 'БК «Кузня» (Анапа / Краснодар)',
@@ -58,11 +58,11 @@ ON CONFLICT (id) DO UPDATE
       fighter_status = 'Pro',
       updated_at     = NOW();
 
--- ── Step 4: Seed / reset fighter_stats for Viktor ────────────────────────────
+-- ── Step 4: Seed / reset fighter_stats for demo fighter ──────────────────────
 -- Level floor table (from economy.ts buildLevelXpFloors):
 --   Level  1 →     0 XP
 --   Level 10 →  3 320 XP
---   Level 12 →  4 869 XP  ← Viktor starts here (Pro tier)
+--   Level 12 →  4 869 XP  ← demo starts here (Pro tier)
 --   Level 13 →  5 799 XP
 -- We set total_xp = 5 200 → Level 12, ~36% into the bracket.
 
@@ -92,7 +92,7 @@ ON CONFLICT (fighter_id) DO UPDATE
       updated_at     = NOW();
 
 -- ── Step 5: Seed a few historical training sessions for the 30-day leaderboard
--- (Creates data so Viktor appears in the AgentsWindow monthly leaderboard)
+-- (Creates data so the demo fighter appears in the monthly leaderboard)
 
 INSERT INTO public.training_sessions (
   fighter_id, gross_amount, commission_pct, commission,

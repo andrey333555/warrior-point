@@ -276,7 +276,7 @@ export const trainers: Trainer[] = [
   },
   {
     id: 6,
-    name: "Viktor Kolesnik",
+    name: "Forge Conditioning",
     experience: "9 лет",
     image: "https://images.unsplash.com/photo-1552072805-f9a7be36c5c9?w=900&q=80",
     bio: "Сила, выносливость, fight conditioning.",

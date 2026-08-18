@@ -1,11 +1,11 @@
 # Чеклист РФ-хостинга (152-ФЗ) · Round 23
 
-Текущий прод: Vercel (`warrior-point.vercel.app`).  
+Текущий прод: Vercel (`https://warrior-point.vercel.app`) · app **v0.2.0** · обновление 19 авг 2026.  
 Цель: VM Selectel или Yandex Cloud + БД в РФ (Supabase self-host или Managed PostgreSQL в РФ).
 
 ## 1. Перед переносом
 
-- [ ] Применить миграции `supabase/migrations/0001` … `0017` (+ `schema.sql` на пустой БД)
+- [ ] Применить миграции `supabase/migrations/0001` … `0022` (+ `schema.sql` на пустой БД)
 - [ ] Скопировать env с Vercel → `.env` на сервере (см. ниже)
 - [ ] `NEXTAUTH_URL` = ваш РФ-домен `https://…`
 - [ ] OAuth redirect URI обновить на РФ-домен
@@ -55,7 +55,7 @@ docker compose up --build -d
 ## 6. Проверка после деплоя
 
 - [ ] `https://<domain>/` — HomeHub
-- [ ] `https://<domain>/fighter/kolesnik` — публичная карточка
+- [ ] `https://<domain>/fighter/king` — публичная карточка
 - [ ] `https://<domain>/settings` — приватность
 - [ ] `https://<domain>/admin?admin=1` — список профилей
 - [ ] `https://<domain>/verify` — KYC stub

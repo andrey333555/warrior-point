@@ -3,6 +3,7 @@ import { validateServerFixationSession } from "@/lib/fixation-server";
 import type { FixationSession } from "@/lib/session-fixation";
 import { createWarriorServerWriteClient } from "@/lib/supabase/server-write";
 import { recordServerTrainingSession } from "@/lib/supabase/session-server";
+import { requireBoundUserId, isLiveEconomyLocked } from "@/lib/api-session";
 
 export const runtime = "nodejs";
 
@@ -12,9 +13,7 @@ type SyncBody = {
 
 /**
  * Server-authoritative fixation sync.
- *
- * Re-verifies check-in proof (code / QR / Bluetooth) before writing
- * `training_sessions` + `fighter_stats` with the service-role client.
+ * Re-verifies check-in proof, then binds fighterId to session before XP write.
  */
 export async function POST(req: Request) {
   let body: SyncBody;
@@ -32,10 +31,28 @@ export async function POST(req: Request) {
     );
   }
 
-  const validation = validateServerFixationSession(session);
+  const bound = await requireBoundUserId(session.fighterId);
+  if (!bound.ok) {
+    return NextResponse.json(
+      { ok: false, message: bound.message },
+      { status: bound.status },
+    );
+  }
+
+  const validation = validateServerFixationSession({
+    ...session,
+    fighterId: bound.userId,
+  });
   if (!validation.valid) {
     return NextResponse.json(
       { ok: false, message: validation.errors.join(" · ") },
+      { status: 400 },
+    );
+  }
+
+  if (isLiveEconomyLocked() && !session.confirmMethod) {
+    return NextResponse.json(
+      { ok: false, message: "Нужен метод check-in" },
       { status: 400 },
     );
   }
@@ -50,7 +67,7 @@ export async function POST(req: Request) {
 
   const confirmedAt = session.confirmedAt ?? new Date().toISOString();
   const result = await recordServerTrainingSession(client, {
-    fighterId: session.fighterId,
+    fighterId: bound.userId,
     grossRub: session.grossRub,
     sessionType: `fixation_${session.confirmMethod ?? "unknown"}`,
     createdAt: confirmedAt,

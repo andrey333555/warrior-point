@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { recordServerTrainingSession } from "@/lib/supabase/session-server";
 import { createWarriorServerWriteClient } from "@/lib/supabase/server-write";
+import { requireBoundUserId, isLiveEconomyLocked } from "@/lib/api-session";
 
 export const runtime = "nodejs";
 
@@ -10,16 +11,15 @@ type SessionBody = {
   sessionType?: string;
   /** Original queue timestamp for offline-synced sessions. */
   createdAt?: string;
+  /** Optional payment proof — required in live production. */
+  paymentId?: string;
 };
 
 const MAX_SESSION_GROSS_RUB = 100_000;
 
 /**
  * Server-authoritative training session completion.
- *
- * The client sends only fighterId + gross; XP, level and the 19% settlement
- * are recomputed here and written with the service-role client, so DevTools
- * cannot inflate `fighter_stats.total_xp`.
+ * Identity must match session (or demo gate). Live prod requires paymentId.
  */
 export async function POST(req: Request) {
   let body: SessionBody;
@@ -29,15 +29,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, message: "Invalid JSON" }, { status: 400 });
   }
 
-  const fighterId = typeof body.fighterId === "string" ? body.fighterId.trim() : "";
+  const claimedFighter =
+    typeof body.fighterId === "string" ? body.fighterId.trim() : "";
   const grossRub = typeof body.grossRub === "number" ? body.grossRub : NaN;
 
-  if (!fighterId || fighterId.length > 128) {
+  const bound = await requireBoundUserId(claimedFighter || null);
+  if (!bound.ok) {
     return NextResponse.json(
-      { ok: false, message: "fighterId обязателен" },
-      { status: 400 },
+      { ok: false, message: bound.message },
+      { status: bound.status },
     );
   }
+  const fighterId = bound.userId;
 
   if (!Number.isFinite(grossRub) || grossRub <= 0 || grossRub > MAX_SESSION_GROSS_RUB) {
     return NextResponse.json(
@@ -46,10 +49,24 @@ export async function POST(req: Request) {
     );
   }
 
+  // Live launch: free XP mint without payment is not allowed.
+  if (isLiveEconomyLocked()) {
+    const paymentId =
+      typeof body.paymentId === "string" ? body.paymentId.trim() : "";
+    if (!paymentId) {
+      return NextResponse.json(
+        {
+          ok: false,
+          message: "Нужен paymentId — сессию нельзя закрыть без оплаты",
+        },
+        { status: 402 },
+      );
+    }
+  }
+
   let createdAt: string | undefined;
   if (typeof body.createdAt === "string") {
     const ts = Date.parse(body.createdAt);
-    // Only accept plausible past timestamps (offline queue backfill).
     if (Number.isFinite(ts) && ts <= Date.now()) {
       createdAt = new Date(ts).toISOString();
     }

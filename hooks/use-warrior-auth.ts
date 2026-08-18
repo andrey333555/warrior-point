@@ -79,7 +79,7 @@ function makeDemoUser(): User {
     id: DEMO_FIGHTER_DB_ID,
     aud: "authenticated",
     role: "authenticated",
-    email: "viktor@warrior.point",
+    email: "king@warrior.point",
     created_at: "2024-01-01T00:00:00.000Z",
     app_metadata: {},
     user_metadata: { full_name: "Боец Бойцов" },

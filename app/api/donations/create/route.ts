@@ -8,6 +8,11 @@ import {
 } from "@/lib/supabase/donations";
 import { isGuestDonorId } from "@/lib/guest-donor";
 import { createWarriorServerWriteClient } from "@/lib/supabase/server-write";
+import {
+  getApiSessionUserId,
+  isDemoEconomyAllowed,
+  isLiveEconomyLocked,
+} from "@/lib/api-session";
 
 export const runtime = "nodejs";
 
@@ -15,9 +20,8 @@ type DonateBody = {
   recipientId?: string;
   grossRub?: number;
   comment?: string;
-  /** Logged-in viewer id — wallet path. */
+  /** Ignored for auth — session decides donor. Kept for back-compat. */
   donorId?: string;
-  /** Anonymous SBP guest id (`guest:<uuid>`). */
   guestDonorId?: string;
   fundraiserFallback?: FundraiserProgress;
 };
@@ -26,11 +30,8 @@ const MAX_DONATION_RUB = 1_000_000;
 
 /**
  * Server-authoritative donation endpoint.
- *
- * All balance mutations happen here with the service-role client (or the
- * server anon client until the key is configured), so the browser anon key
- * can be locked out of `profiles.balance` / `donations` writes by
- * migration 0014.
+ * Wallet debit only for the authenticated session user.
+ * Unpaid guest "SBP" mint is blocked in production unless ALLOW_DEMO_ECONOMY=1.
  */
 export async function POST(req: Request) {
   let body: DonateBody;
@@ -40,9 +41,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, message: "Invalid JSON" }, { status: 400 });
   }
 
-  const recipientId = typeof body.recipientId === "string" ? body.recipientId.trim() : "";
+  const recipientId =
+    typeof body.recipientId === "string" ? body.recipientId.trim() : "";
   const grossRub = typeof body.grossRub === "number" ? body.grossRub : NaN;
-  const comment = typeof body.comment === "string" ? body.comment.slice(0, 280) : undefined;
+  const comment =
+    typeof body.comment === "string" ? body.comment.slice(0, 280) : undefined;
 
   if (!recipientId || recipientId.length > 128) {
     return NextResponse.json(
@@ -66,7 +69,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const donorId = typeof body.donorId === "string" ? body.donorId.trim() : "";
+  const sessionUserId = await getApiSessionUserId();
   const guestDonorId =
     typeof body.guestDonorId === "string" && isGuestDonorId(body.guestDonorId)
       ? body.guestDonorId
@@ -75,10 +78,10 @@ export async function POST(req: Request) {
   let result: DonateResult | null = null;
   let source: "wallet" | "sbp_guest" = "sbp_guest";
 
-  // 1. Wallet path — member donating from their platform balance.
-  if (donorId && donorId !== recipientId) {
+  // 1. Wallet path — ONLY the session user can spend their balance.
+  if (sessionUserId && sessionUserId !== recipientId) {
     const walletResult = await handleDonate(client, {
-      donorId,
+      donorId: sessionUserId,
       recipientId,
       grossRub,
       comment,
@@ -93,14 +96,37 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
-    // INSUFFICIENT_BALANCE / DB_ERROR → fall through to guest SBP
+    // INSUFFICIENT_BALANCE → fall through only if demo guest tips allowed
   }
 
-  // 2. Guest SBP path — anonymous tip, fighter credited net.
+  // Reject spoofed donorId that doesn't match session
+  if (
+    typeof body.donorId === "string" &&
+    body.donorId.trim() &&
+    body.donorId.trim() !== sessionUserId
+  ) {
+    return NextResponse.json(
+      { ok: false, message: "donorId не совпадает с сессией" },
+      { status: 403 },
+    );
+  }
+
+  // 2. Guest SBP — blocked in live prod (no payment proof = free mint).
   if (!result) {
+    if (isLiveEconomyLocked() || !isDemoEconomyAllowed()) {
+      return NextResponse.json(
+        {
+          ok: false,
+          message:
+            "Гостевой донат без оплаты отключён. Войдите или подключите ЮKassa.",
+        },
+        { status: 401 },
+      );
+    }
+
     if (!guestDonorId) {
       return NextResponse.json(
-        { ok: false, message: "Нужен donorId или guestDonorId" },
+        { ok: false, message: "Нужна авторизация или guestDonorId (demo)" },
         { status: 400 },
       );
     }
@@ -125,7 +151,10 @@ export async function POST(req: Request) {
     client,
     recipientId,
     body.fundraiserFallback
-      ? { title: body.fundraiserFallback.title, goalRub: body.fundraiserFallback.goalRub }
+      ? {
+          title: body.fundraiserFallback.title,
+          goalRub: body.fundraiserFallback.goalRub,
+        }
       : undefined,
   );
 

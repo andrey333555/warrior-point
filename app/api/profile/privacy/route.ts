@@ -63,7 +63,7 @@ export async function GET(req: Request) {
         hideClub: false,
         hideBio: false,
         hideRecord: false,
-        slug: profileId === "WP-INTL-X9-441K" ? "kolesnik" : null,
+        slug: profileId === "WP-INTL-X9-441K" ? "king" : null,
         bio: null,
         avatarUrl: null,
         record: null,
@@ -124,6 +124,7 @@ export async function POST(req: Request) {
   const gate = await canEditProfilePrivacy({
     actorId: body.actorId,
     profileId,
+    adminSecret: req.headers.get("x-warrior-admin-secret"),
   });
   if (!gate.ok) {
     return NextResponse.json(

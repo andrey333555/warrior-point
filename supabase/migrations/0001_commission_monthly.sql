@@ -65,7 +65,7 @@ INSERT INTO public.profiles (id, display_name, role, coach_id)
 VALUES
   ('WP-ADMIN-001',    'Warrior Point Admin',  'admin',   NULL),
   ('WP-COACH-001',    'Сергей Романов',       'coach',   NULL),
-  ('WP-INTL-X9-441K', 'Виктор Колесник',     'fighter', 'WP-COACH-001')
+  ('WP-INTL-X9-441K', 'King León',     'fighter', 'WP-COACH-001')
 ON CONFLICT (id) DO UPDATE
   SET display_name = EXCLUDED.display_name,
       role         = EXCLUDED.role,

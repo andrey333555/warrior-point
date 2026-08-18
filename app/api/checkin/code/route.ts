@@ -5,13 +5,13 @@ import {
   serverTrainerCode,
 } from "@/lib/checkin-server";
 import { formatCodeDisplay } from "@/lib/verify";
+import { requireBoundUserId } from "@/lib/api-session";
 
 export const runtime = "nodejs";
 
 /**
  * Trainer's rotating check-in code (server secret).
- * Called by the trainer's own device to display the code — fighters can't
- * compute it from the bundle like the legacy client-side hash.
+ * Only the bound trainer may fetch their code (session or demo gate).
  */
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -24,12 +24,19 @@ export async function GET(req: Request) {
     );
   }
 
+  const bound = await requireBoundUserId(trainerId);
+  if (!bound.ok) {
+    return NextResponse.json(
+      { ok: false, message: bound.message },
+      { status: bound.status },
+    );
+  }
+
   if (!isCheckinSecretConfigured()) {
-    // No secret yet — client falls back to the local demo code.
     return NextResponse.json({ ok: true, configured: false });
   }
 
-  const code = serverTrainerCode(trainerId);
+  const code = serverTrainerCode(bound.userId);
   const { slot, expiresInMs } = serverCodeExpiry();
 
   return NextResponse.json({

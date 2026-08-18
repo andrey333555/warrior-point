@@ -37,7 +37,7 @@ export default function SettingsPage() {
   const [hideClub, setHideClub] = useState(false);
   const [hideBio, setHideBio] = useState(false);
   const [hideRecord, setHideRecord] = useState(false);
-  const [slug, setSlug] = useState("kolesnik");
+  const [slug, setSlug] = useState("king");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -194,7 +194,7 @@ export default function SettingsPage() {
             value={slug}
             onChange={(e) => setSlug(e.target.value.toLowerCase())}
             className="mt-1 w-full rounded-xl border border-[var(--wp-border)] bg-[var(--wp-surface)] px-3 py-2.5 text-sm text-[var(--foreground)]"
-            placeholder="kolesnik"
+            placeholder="king"
           />
           <span className="mt-1 block text-[11px] text-[var(--wp-muted)]">
             Ссылка: /fighter/{slug || "…"}
@@ -271,7 +271,7 @@ export default function SettingsPage() {
 
         <button
           type="button"
-          onClick={() => router.push(`/fighter/${slug || "kolesnik"}`)}
+          onClick={() => router.push(`/fighter/${slug || "king"}`)}
           className="mt-3 w-full rounded-xl border border-[var(--wp-border)] py-3 text-sm text-[var(--wp-muted)]"
         >
           Открыть публичную карточку →

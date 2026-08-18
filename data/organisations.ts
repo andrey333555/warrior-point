@@ -291,17 +291,9 @@ export function findOrg(id: string): OrgEntry | undefined {
   return ORGANISATIONS.find((o) => o.id === id);
 }
 
-/** @deprecated Use DEMO_FIGHTER_ORG_RECORDS */
-export const VIKTOR_ORG_RECORDS = DEMO_FIGHTER_ORG_RECORDS;
-
 /** Get the demo fighter's record for a given org. */
 export function getDemoFighterOrgRecord(orgId: string): FighterOrgRecord | undefined {
   return DEMO_FIGHTER_ORG_RECORDS.find((r) => r.orgId === orgId);
-}
-
-/** @deprecated Use getDemoFighterOrgRecord */
-export function getViktorOrgRecord(orgId: string): FighterOrgRecord | undefined {
-  return getDemoFighterOrgRecord(orgId);
 }
 
 /** Format a fighter-org record into lotus petals. */

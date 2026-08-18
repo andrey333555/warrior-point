@@ -75,11 +75,22 @@ export function buildReferralLink(
   return url.toString();
 }
 
-export function getShareText(referralCode: string, _handle?: string): string {
+export function getShareText(
+  referralCode: string,
+  _handle?: string,
+  extra?: { fighterName?: string; round?: number },
+): string {
+  const who = extra?.fighterName?.trim();
+  const round = extra?.round;
+  const hook = who
+    ? `${who}${round ? ` · Round ${round}` : ""} зовёт тебя в Warrior Point.`
+    : `Тебя зовут в Round 23 — тренируйся с лучшими.`;
+
   return (
-    `Вступай в Round 23 — тренируйся с лучшими тренерами 🥊\n` +
-    `Мой код: ${referralCode}\n` +
-    `Получи 300₽ на первую тренировку`
+    `${hook}\n` +
+    `🎁 +300 ₽ на первую тренировку\n` +
+    `Код: ${referralCode}\n` +
+    `Открой ссылку — забери бонус и выйди на ковёр.`
   );
 }
 
@@ -87,6 +98,7 @@ export function getShareLinks(
   referralCode: string,
   handle?: string,
   baseUrl?: string,
+  extra?: { fighterName?: string; round?: number },
 ): {
   copy: string;
   telegram: string;
@@ -99,7 +111,7 @@ export function getShareLinks(
       ? window.location.origin
       : DEFAULT_BASE_URL);
   const link = buildReferralLink(referralCode, origin);
-  const text = getShareText(referralCode, handle);
+  const text = getShareText(referralCode, handle, extra);
 
   return {
     copy: link,

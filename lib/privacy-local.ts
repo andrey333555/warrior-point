@@ -18,7 +18,7 @@ const DEFAULTS: LocalPrivacy = {
   hideClub: false,
   hideBio: false,
   hideRecord: false,
-  slug: "kolesnik",
+  slug: "king",
 };
 
 export function loadLocalPrivacy(): LocalPrivacy {

@@ -24,10 +24,13 @@ ALTER TABLE public.profiles
   ADD CONSTRAINT profiles_verification_status_check
   CHECK (verification_status IN ('none', 'pending', 'verified', 'rejected'));
 
--- Ensure showcase fighter keeps public slug for /fighter/kolesnik
+-- Ensure showcase fighter keeps public slug for /fighter/king
 UPDATE public.profiles
 SET
-  slug       = COALESCE(slug, 'kolesnik'),
+  slug       = CASE
+                 WHEN slug IS NULL OR slug = '' THEN 'king'
+                 ELSE slug
+               END,
   visibility = COALESCE(visibility, 'public'),
   updated_at = NOW()
 WHERE id = 'WP-INTL-X9-441K';

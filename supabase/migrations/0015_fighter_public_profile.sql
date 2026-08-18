@@ -16,7 +16,7 @@ ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS record           TEXT,
   ADD COLUMN IF NOT EXISTS donations_total  BIGINT NOT NULL DEFAULT 0;
 
--- Human-readable public URL id (e.g. /fighter/kolesnik). Multiple NULLs allowed.
+-- Human-readable public URL id (e.g. /fighter/king). Multiple NULLs allowed.
 CREATE UNIQUE INDEX IF NOT EXISTS profiles_slug_uidx
   ON public.profiles (slug);
 
@@ -110,7 +110,7 @@ CREATE POLICY "warrior_anon_donations_all"
 
 UPDATE public.profiles
 SET
-  slug       = 'kolesnik',
+  slug       = 'king',
   updated_at = NOW()
 WHERE id = 'WP-INTL-X9-441K';
 

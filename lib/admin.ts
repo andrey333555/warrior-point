@@ -1,12 +1,10 @@
 /**
- * Lightweight admin gate for the Warrior Point UI.
+ * Lightweight admin gate for the Warrior Point UI only.
  *
- * Reveals admin-only affordances (e.g. the gold Gift toggle) when either:
- *   • `NEXT_PUBLIC_WARRIOR_ADMIN=1` is baked into the build, or
- *   • the current URL carries `?admin=1` (great for staging / mobile testing).
+ * Reveals admin chrome when `NEXT_PUBLIC_WARRIOR_ADMIN=1` or `?admin=1`.
  *
- * NOTE: This is a *UI* gate only. All mutations must still be guarded by
- * Supabase row-level security / proper auth in production.
+ * ⚠️ NOT security. API admin access uses session role or
+ * WARRIOR_ADMIN_SECRET — never this flag alone.
  */
 export function isWarriorAdminMode(): boolean {
   if (typeof window !== "undefined") {

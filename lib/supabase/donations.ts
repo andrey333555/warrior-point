@@ -99,6 +99,36 @@ async function resilientInsert(
   return { error: new Error(`Insert failed on ${table}`) };
 }
 
+/**
+ * Atomic donation XP via Postgres RPC `grant_donation_xp`.
+ *
+ * HOOK (today): call right after INSERT with status='paid'.
+ * HOOK (future ЮKassa webhook): when status flips pending→paid, call the
+ * same helper — idempotency is inside the RPC (`xp_granted`), not here.
+ *
+ * XP failure must NEVER fail the money transfer — errors are logged only.
+ */
+async function grantDonationXpOnce(
+  client: SupabaseClient,
+  donationId: string | undefined,
+): Promise<void> {
+  if (!donationId) return;
+
+  try {
+    const { error } = await client.rpc("grant_donation_xp", {
+      p_donation_id: donationId,
+    });
+    if (error) {
+      console.warn(
+        "[donations] grant_donation_xp failed (donate still ok):",
+        error.message,
+      );
+    }
+  } catch (err) {
+    console.warn("[donations] grant_donation_xp threw (donate still ok):", err);
+  }
+}
+
 /** Pull fundraiser goal + raised sum for a fighter passport. */
 export async function fetchFundraiserProgress(
   client: SupabaseClient,
@@ -297,6 +327,8 @@ export async function handleDonate(
     return { ok: false, code: "DB_ERROR", message: insertErr.message };
   }
 
+  // Paid at INSERT — grant XP here. Webhook path later: same call after pending→paid.
+  await grantDonationXpOnce(client, donationId);
   await bumpDonationsTotal(client, recipientId, breakdown.gross);
 
   return {
@@ -374,6 +406,8 @@ export async function handleGuestSbpDonate(
     return { ok: false, code: "DB_ERROR", message: insertErr.message };
   }
 
+  // Paid at INSERT — grant XP here. Webhook path later: same call after pending→paid.
+  await grantDonationXpOnce(client, donationId);
   await bumpDonationsTotal(client, recipientId, breakdown.gross);
 
   return {

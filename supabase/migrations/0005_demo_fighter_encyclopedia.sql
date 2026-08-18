@@ -1,5 +1,4 @@
--- Warrior Point · Migration 0005 — Viktor Kolesnik encyclopedic profile
--- Источник: официальный профиль БК «Кузня» / Tapology / официальные данные.
+-- Warrior Point · Migration 0005 — Demo fighter encyclopedic profile
 -- Run in: Supabase Dashboard → SQL Editor → New query → Run
 -- Idempotent: safe to re-run.
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -9,12 +8,12 @@
 ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS bio TEXT;
 
--- ── Step 2: Update full encyclopedic profile for Viktor ──────────────────────
+-- ── Step 2: Update full encyclopedic profile for demo fighter ────────────────
 --
 -- XP ladder reference (economy.ts buildLevelXpFloors):
 --   Level 15  →  8 015 XP
 --   Level 16  →  9 288 XP
---   Level 17  → 10 695 XP  ← Viktor (pro tier)
+--   Level 17  → 10 695 XP  ← demo (pro tier)
 --   Level 18  → 12 257 XP
 --
 -- total_xp = 11 400 → Level 17, ≈45% through bracket.
@@ -26,24 +25,24 @@ INSERT INTO public.profiles (
 )
 VALUES (
   'WP-INTL-X9-441K',
-  'Колесник Виктор Григорьевич',
+  'King León',
   'fighter',
   'WP-COACH-001',
   'БК «Кузня» (Анапа / Краснодар)',
   'MMA · Комплексные единоборства',
   'Featherweight 66 кг / Lightweight 70.3 кг',
   'Pro',
-  'Профессиональный боец ММА. Промоушены: ACA, RCC, M-1 Global, Marathon 360. Тренируется под руководством Олега Владимировича. Базовый зал — БК «Кузня» (Анапа).'
+  'Демо-боец платформы Round 23. Промоушены: ACA, RCC, M-1 Global, Marathon 360. Базовый зал — БК «Кузня» (Анапа).'
 )
 ON CONFLICT (id) DO UPDATE
-  SET display_name   = 'Колесник Виктор Григорьевич',
+  SET display_name   = 'King León',
       role           = 'fighter',
       coach_id       = 'WP-COACH-001',
       club           = 'БК «Кузня» (Анапа / Краснодар)',
       specialization = 'MMA · Комплексные единоборства',
       weight_class   = 'Featherweight 66 кг / Lightweight 70.3 кг',
       fighter_status = 'Pro',
-      bio            = 'Профессиональный боец ММА. Промоушены: ACA, RCC, M-1 Global, Marathon 360. Тренируется под руководством Олега Владимировича. Базовый зал — БК «Кузня» (Анапа).',
+      bio            = 'Демо-боец платформы Round 23. Промоушены: ACA, RCC, M-1 Global, Marathon 360. Базовый зал — БК «Кузня» (Анапа).',
       updated_at     = NOW();
 
 -- ── Step 3: Upgrade fighter_stats → Level 17 ─────────────────────────────────

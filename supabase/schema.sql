@@ -166,7 +166,7 @@ INSERT INTO public.profiles (id, display_name, role, coach_id, club, specializat
 VALUES
   ('WP-ADMIN-001',    'Warrior Point Admin', 'admin',   NULL,           NULL,                            NULL,                                    NULL,                                  'Admin'),
   ('WP-COACH-001',    'Сергей Романов',      'coach',   NULL,           'БК «Кузня»',                   'MMA · Тренер',                          NULL,                                  'Coach'),
-  ('WP-INTL-X9-441K', 'Виктор Колесник',    'fighter', 'WP-COACH-001', 'БК «Кузня» (Анапа / Краснодар)', 'MMA · Комплексные единоборства',      'Featherweight · Полулегкий вес (66 кг)', 'Pro')
+  ('WP-INTL-X9-441K', 'King León',    'fighter', 'WP-COACH-001', 'БК «Кузня» (Анапа / Краснодар)', 'MMA · Комплексные единоборства',      'Featherweight · Полулегкий вес (66 кг)', 'Pro')
 ON CONFLICT (id) DO UPDATE
   SET display_name   = EXCLUDED.display_name,
       role           = EXCLUDED.role,

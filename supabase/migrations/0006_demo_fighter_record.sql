@@ -1,5 +1,4 @@
--- Warrior Point · Migration 0006 — Viktor Kolesnik official fight record
--- Source: Tapology / official БК «Кузня» profile
+-- Warrior Point · Migration 0006 — Demo fighter official fight record
 -- Run in: Supabase Dashboard → SQL Editor → New query → Run
 -- Idempotent: safe to re-run.
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -28,8 +27,8 @@ ALTER TABLE public.fighter_stats
 ALTER TABLE public.fighter_stats
   ADD COLUMN IF NOT EXISTS notable_opponents JSONB;
 
--- ── Step 4: Update Viktor's fight record ─────────────────────────────────────
--- Official record: 26 wins · 4 losses · 1 draw
+-- ── Step 4: Update demo fighter fight record ─────────────────────────────────
+-- Demo record: 26 wins · 4 losses · 1 draw
 -- Pro since: 2013
 -- Key opponents: Nate Landwehr, Keisuke Sasu, Yoshiki Nakahara,
 --               Ryo Takagi, Atsushi Kishimoto, Rasul Mirzaev

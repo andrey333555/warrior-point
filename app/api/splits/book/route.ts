@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
-import { handleBookSplit, type BookSplitResult } from "@/lib/supabase/split-booking";
+import {
+  handleBookSplit,
+  type BookSplitResult,
+} from "@/lib/supabase/split-booking";
 import { createWarriorServerWriteClient } from "@/lib/supabase/server-write";
+import { requireBoundUserId } from "@/lib/api-session";
 
 export const runtime = "nodejs";
 
@@ -9,7 +13,10 @@ type BookBody = {
   splitId?: string;
 };
 
-const ERROR_STATUS: Record<Extract<BookSplitResult, { ok: false }>["code"], number> = {
+const ERROR_STATUS: Record<
+  Extract<BookSplitResult, { ok: false }>["code"],
+  number
+> = {
   NOT_FOUND: 404,
   FULL: 409,
   ALREADY_BOOKED: 409,
@@ -19,10 +26,8 @@ const ERROR_STATUS: Record<Extract<BookSplitResult, { ok: false }>["code"], numb
 };
 
 /**
- * Server-authoritative split booking: debit client balance, credit coach
- * earnings, insert booking + verified training_session, bump streak/XP.
- * Gross is fixed server-side (SPLIT_CLIENT_GROSS_RUB) — the client cannot
- * pass its own price.
+ * Server-authoritative split booking.
+ * clientId must match authenticated session (or demo gate).
  */
 export async function POST(req: Request) {
   let body: BookBody;
@@ -32,13 +37,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, message: "Invalid JSON" }, { status: 400 });
   }
 
-  const clientId = typeof body.clientId === "string" ? body.clientId.trim() : "";
+  const claimedClient =
+    typeof body.clientId === "string" ? body.clientId.trim() : "";
   const splitId = typeof body.splitId === "string" ? body.splitId.trim() : "";
 
-  if (!clientId || !splitId) {
+  if (!splitId) {
     return NextResponse.json(
-      { ok: false, message: "clientId и splitId обязательны" },
+      { ok: false, message: "splitId обязателен" },
       { status: 400 },
+    );
+  }
+
+  const bound = await requireBoundUserId(claimedClient || null);
+  if (!bound.ok) {
+    return NextResponse.json(
+      { ok: false, message: bound.message },
+      { status: bound.status },
     );
   }
 
@@ -50,12 +64,15 @@ export async function POST(req: Request) {
     );
   }
 
-  const result = await handleBookSplit(client, { clientId, splitId });
+  const result = await handleBookSplit(client, {
+    splitId,
+    clientId: bound.userId,
+  });
 
   if (!result.ok) {
     return NextResponse.json(
       { ok: false, code: result.code, message: result.message },
-      { status: ERROR_STATUS[result.code] },
+      { status: ERROR_STATUS[result.code] ?? 502 },
     );
   }
 
@@ -63,9 +80,9 @@ export async function POST(req: Request) {
     ok: true,
     bookedCount: result.bookedCount,
     activated: result.activated,
-    breakdown: result.breakdown,
     newBalance: result.newBalance,
     dailyStreak: result.dailyStreak,
     iphoneTickets: result.iphoneTickets,
+    breakdown: result.breakdown,
   });
 }

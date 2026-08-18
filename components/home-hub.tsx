@@ -1,19 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useRouter } from "next/navigation";
+import InviteWelcome from "@/components/invite-welcome";
+import StoriesViewer from "@/components/stories-viewer";
+import { STORY_RINGS } from "@/lib/stories";
 
 // ═══════════════════════════════════════════════════════════════
 // ДАННЫЕ (mock → Supabase)
 // ═══════════════════════════════════════════════════════════════
-
-type Story = {
-  id: string;
-  title: string;
-  photo: string;
-  isNew?: boolean;
-  link: string;
-};
 
 type Promo = {
   tag: string;
@@ -23,39 +18,6 @@ type Promo = {
   gradient: string;
   link: string;
 };
-
-const STORIES: Story[] = [
-  {
-    id: "1",
-    title: "Путь к 10 раунду",
-    photo:
-      "https://images.unsplash.com/photo-1599058917765-a780eda07a3e?w=400&q=80",
-    isNew: true,
-    link: "/stories/1",
-  },
-  {
-    id: "2",
-    title: "Топ залов Краснодара",
-    photo:
-      "https://images.unsplash.com/photo-1547483238-f400e65ccd56?w=400&q=80",
-    isNew: true,
-    link: "/stories/2",
-  },
-  {
-    id: "3",
-    title: "Тренировка с Волковым",
-    photo:
-      "https://images.unsplash.com/photo-1552072805-f9a7be36c5c9?w=400&q=80",
-    link: "/stories/3",
-  },
-  {
-    id: "4",
-    title: "Как работает ELO",
-    photo:
-      "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=400&q=80",
-    link: "/stories/4",
-  },
-];
 
 const PROMOS: Promo[] = [
   {
@@ -107,12 +69,36 @@ const DEMO_USER: UserData = {
 export default function HomeHub() {
   const router = useRouter();
   const [user] = useState<UserData>(DEMO_USER);
+  const [activeStoryId, setActiveStoryId] = useState<string | null>(null);
+  const [seenIds, setSeenIds] = useState<Set<string>>(() => new Set());
+
+  const markSeen = (ringId: string) => {
+    setSeenIds((prev) => {
+      if (prev.has(ringId)) return prev;
+      const next = new Set(prev);
+      next.add(ringId);
+      return next;
+    });
+  };
 
   return (
     <div
       className="relative mx-auto min-h-screen max-w-[420px] pb-24"
       style={{ background: "#0A0A0A" }}
     >
+      <StoriesViewer
+        open={activeStoryId != null}
+        startRingId={activeStoryId}
+        onClose={() => setActiveStoryId(null)}
+        onRingSeen={markSeen}
+      />
+
+      <Suspense fallback={null}>
+        <div className="relative z-20 pt-3">
+          <InviteWelcome variant="banner" />
+        </div>
+      </Suspense>
+
       {/* ═══════ HERO SECTION ═══════ */}
       <div className="relative pb-5">
         <div className="absolute inset-x-0 top-0 h-[420px] overflow-hidden">
@@ -319,50 +305,57 @@ export default function HomeHub() {
       <div className="pb-4 pt-2">
         <h2 className="mb-3 px-4 text-xl font-bold text-white">Истории</h2>
         <div className="scrollbar-hide flex gap-2.5 overflow-x-auto px-4">
-          {STORIES.map((story) => (
-            <button
-              key={story.id}
-              type="button"
-              onClick={() => router.push(story.link)}
-              className="relative flex-shrink-0 overflow-hidden rounded-2xl"
-              style={{
-                width: 110,
-                aspectRatio: "3/4",
-                border: story.isNew
-                  ? "2px solid #C9A84C"
-                  : "2px solid rgba(201,168,76,0.35)",
-              }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={story.photo}
-                className="h-full w-full object-cover"
-                alt={story.title}
-              />
-              <div
-                className="absolute inset-0"
+          {STORY_RINGS.map((story) => {
+            const isNew = story.isNew && !seenIds.has(story.id);
+            return (
+              <button
+                key={story.id}
+                type="button"
+                onClick={() => setActiveStoryId(story.id)}
+                className="relative flex-shrink-0 overflow-hidden rounded-2xl transition active:scale-[0.97]"
                 style={{
-                  background:
-                    "linear-gradient(to top, rgba(0,0,0,0.9), transparent 60%)",
+                  width: 110,
+                  aspectRatio: "3/4",
+                  border: isNew
+                    ? "2px solid #C9A84C"
+                    : "2px solid rgba(201,168,76,0.28)",
+                  boxShadow: isNew
+                    ? "0 0 18px -6px rgba(201,168,76,0.55)"
+                    : undefined,
+                  opacity: seenIds.has(story.id) ? 0.72 : 1,
                 }}
-              />
-              {story.isNew ? (
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={story.cover}
+                  className="h-full w-full object-cover"
+                  alt={story.title}
+                />
                 <div
-                  className="absolute left-1.5 top-1.5 rounded-full px-1.5 py-0.5 font-bold"
+                  className="absolute inset-0"
                   style={{
-                    background: "#C9A84C",
-                    color: "#0A0A0A",
-                    fontSize: 8,
+                    background:
+                      "linear-gradient(to top, rgba(0,0,0,0.9), transparent 60%)",
                   }}
-                >
-                  НОВОЕ
-                </div>
-              ) : null}
-              <p className="absolute bottom-2 left-2 right-2 text-left text-xs font-semibold leading-tight text-white">
-                {story.title}
-              </p>
-            </button>
-          ))}
+                />
+                {isNew ? (
+                  <div
+                    className="absolute left-1.5 top-1.5 rounded-full px-1.5 py-0.5 font-bold"
+                    style={{
+                      background: "#C9A84C",
+                      color: "#0A0A0A",
+                      fontSize: 8,
+                    }}
+                  >
+                    НОВОЕ
+                  </div>
+                ) : null}
+                <p className="absolute bottom-2 left-2 right-2 text-left text-xs font-semibold leading-tight text-white">
+                  {story.title}
+                </p>
+              </button>
+            );
+          })}
         </div>
       </div>
 

@@ -68,7 +68,7 @@ ON CONFLICT (id) DO UPDATE
       website      = EXCLUDED.website,
       logo_key     = EXCLUDED.logo_key;
 
--- ── Seed Viktor Kolesnik fighter_orgs records ─────────────────────────────────
+-- ── Seed demo fighter fighter_orgs records ───────────────────────────────────
 
 INSERT INTO public.fighter_orgs
   (fighter_id, org_id, contract_status, league_wins, league_losses, league_draws,

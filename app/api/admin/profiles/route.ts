@@ -9,12 +9,13 @@ function client() {
   return createWarriorServiceClient() ?? createWarriorBrowserClient();
 }
 
-/** List profiles — admin/coach from DB role, or NEXT_PUBLIC_WARRIOR_ADMIN=1. */
+/** List profiles — admin/coach from session role, or WARRIOR_ADMIN_SECRET. */
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const actorId = url.searchParams.get("actorId")?.trim();
+  const adminSecret = req.headers.get("x-warrior-admin-secret");
 
-  const gate = await canAccessAdmin({ actorId, write: false });
+  const gate = await canAccessAdmin({ actorId, write: false, adminSecret });
   if (!gate.ok) {
     return NextResponse.json(
       { ok: false, message: gate.message },
@@ -30,9 +31,9 @@ export async function GET(req: Request) {
       profiles: [
         {
           id: DEMO_FIGHTER_DB_ID,
-          displayName: "Виктор Колесник",
+          displayName: "King León",
           role: "fighter",
-          slug: "kolesnik",
+          slug: "king",
           visibility: "public",
           verificationStatus: "none",
         },
@@ -89,7 +90,12 @@ export async function DELETE(req: Request) {
     );
   }
 
-  const gate = await canAccessAdmin({ actorId: body.actorId, write: true });
+  const adminSecret = req.headers.get("x-warrior-admin-secret");
+  const gate = await canAccessAdmin({
+    actorId: body.actorId,
+    write: true,
+    adminSecret,
+  });
   if (!gate.ok || !gate.canDelete) {
     return NextResponse.json(
       { ok: false, message: gate.ok ? "Только admin" : gate.message },
@@ -144,7 +150,12 @@ export async function PATCH(req: Request) {
     );
   }
 
-  const gate = await canAccessAdmin({ actorId: body.actorId, write: true });
+  const adminSecret = req.headers.get("x-warrior-admin-secret");
+  const gate = await canAccessAdmin({
+    actorId: body.actorId,
+    write: true,
+    adminSecret,
+  });
   if (!gate.ok || !gate.canDelete) {
     return NextResponse.json(
       { ok: false, message: gate.ok ? "Только admin" : gate.message },
