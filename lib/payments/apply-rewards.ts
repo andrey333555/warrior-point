@@ -1,9 +1,7 @@
 "use client";
 
-import { addBooking, completeBooking, BOOKING_TYPE_LABEL, type BookingType } from "@/lib/bookings";
-import { awardTrainingXp } from "@/lib/xp";
+import { addBooking, completeBooking, type BookingType } from "@/lib/bookings";
 import {
-  creditWalletCashback,
   markPaymentApplied,
   wasPaymentApplied,
 } from "@/lib/wallet-store";
@@ -38,6 +36,7 @@ export type ApplyPaymentRewardsResult = {
   platformCommissionRub?: number;
 };
 
+/** Display-only: server already minted XP/cashback. */
 export async function applyPaymentRewards(
   paymentId: string,
 ): Promise<ApplyPaymentRewardsResult> {
@@ -56,6 +55,12 @@ export async function applyPaymentRewards(
     return { applied: false };
   }
 
+  void fetch("/api/session/complete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ paymentId }),
+  }).catch(() => undefined);
+
   const typeKey =
     data.trainingType === "individual" ||
     data.trainingType === "group" ||
@@ -73,10 +78,6 @@ export async function applyPaymentRewards(
   });
 
   completeBooking(booking.id);
-
-  const label = BOOKING_TYPE_LABEL[typeKey];
-  awardTrainingXp(`${label} · ${data.trainerName ?? "Тренер"}`);
-  creditWalletCashback(data.settlement.cashbackRub);
   markPaymentApplied(paymentId);
 
   return {

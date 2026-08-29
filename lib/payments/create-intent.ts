@@ -3,6 +3,8 @@ import { buildSessionCompleteUrl } from "@/lib/session-complete";
 import { createYooKassaPayment, isYooKassaConfigured } from "@/lib/payments/yookassa";
 import { savePaymentIntent } from "@/lib/payments/store";
 import type { CreatePaymentInput, PaymentIntent } from "@/lib/payments/types";
+import { isMockPaymentsAllowed } from "@/lib/api-session";
+import { isServiceRoleConfigured } from "@/lib/supabase/server-admin";
 
 const DEFAULT_GROSS_RUB = 2000;
 
@@ -90,6 +92,14 @@ export async function createFightPayment(
           err instanceof Error ? err.message : "Не удалось создать платёж",
       };
     }
+  }
+
+  if (!isMockPaymentsAllowed()) {
+    return { ok: false, message: "ЮKassa не настроена" };
+  }
+
+  if (!isServiceRoleConfigured() && process.env.NODE_ENV === "production") {
+    return { ok: false, message: "Нужен SUPABASE_SERVICE_ROLE_KEY" };
   }
 
   return {

@@ -10,7 +10,7 @@ import {
 } from "@/lib/bookings";
 import { resolveSessionTrainer } from "@/lib/session-complete";
 import { applyPaymentRewards } from "@/lib/payments/apply-rewards";
-import { awardTrainingXp, getXp, XP_REWARDS } from "@/lib/xp";
+import { getXp, XP_REWARDS } from "@/lib/xp";
 import { getOvertakenFighters } from "@/lib/session-overtake";
 import {
   getRoundByXP,
@@ -222,9 +222,9 @@ export default function CompleteSession() {
 
     void applyPaymentRewards(paymentId).then((res) => {
       if (!res.applied) return;
-      const xp = getXp();
-      setXpAfter(xp.total);
-      setStreak(xp.streakDays);
+      if (typeof res.xpAward === "number") {
+        setXpAfter((prev) => prev + res.xpAward!);
+      }
       if (res.cashbackRub) setCashbackRub(res.cashbackRub);
       if (res.gymName) setSessionGym(res.gymName);
     });
@@ -238,12 +238,7 @@ export default function CompleteSession() {
   useEffect(() => {
     if (paymentId || xpAwarded.current) return;
     xpAwarded.current = true;
-    const next = awardTrainingXp(
-      `${BOOKING_TYPE_LABEL[typeKey]} · ${resolvedName}`,
-    );
-    setXpAfter(next.total);
-    setStreak(next.streakDays);
-  }, [paymentId, resolvedName, typeKey, xpBefore]);
+  }, [paymentId]);
 
   const result = useMemo(
     () =>

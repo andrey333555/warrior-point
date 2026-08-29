@@ -179,10 +179,7 @@ export function validateServerFixation(
       errors.push("QR не прошёл серверную проверку.");
     }
   } else if (input.confirmMethod === "bluetooth") {
-    const parts = input.confirmProof.split(":");
-    if (parts[0] !== "bt" || parts[1] !== input.trainerId) {
-      errors.push("Невалидный Bluetooth proof.");
-    }
+    errors.push("Bluetooth check-in отключён.");
   } else {
     errors.push("Неизвестный метод фиксации.");
   }

@@ -12,6 +12,9 @@ export type BoundUser =
 
 /** True when demo economy bypasses are allowed (local / staging). */
 export function isDemoEconomyAllowed(): boolean {
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_DEMO_ECONOMY !== "1") {
+    return false;
+  }
   return (
     process.env.ALLOW_DEMO_ECONOMY === "1" ||
     process.env.NODE_ENV === "development"
@@ -20,7 +23,8 @@ export function isDemoEconomyAllowed(): boolean {
 
 /**
  * Production with real money: unpaid guest tips and free XP mint must die.
- * Set LIVE_ECONOMY_LOCK=1 on Vercel production.
+ * Set LIVE_ECONOMY_LOCK=1 on Vercel production. Also implied by production
+ * without ALLOW_DEMO_ECONOMY=1.
  */
 export function isLiveEconomyLocked(): boolean {
   return (
@@ -28,6 +32,13 @@ export function isLiveEconomyLocked(): boolean {
     (process.env.NODE_ENV === "production" &&
       process.env.ALLOW_DEMO_ECONOMY !== "1")
   );
+}
+
+/** Mock YooKassa / free-succeed paths. Never in production. */
+export function isMockPaymentsAllowed(): boolean {
+  if (isLiveEconomyLocked()) return false;
+  if (process.env.NODE_ENV === "production") return false;
+  return isDemoEconomyAllowed();
 }
 
 /** NextAuth session user id (OAuth sub / telegram id / …). */

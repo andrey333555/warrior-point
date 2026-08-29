@@ -108,8 +108,7 @@ const sberProvider: OAuthConfig<SberProfile> = {
   },
 };
 
-export const authOptions: NextAuthOptions = {
-  providers: [
+const providers: NextAuthOptions["providers"] = [
     CredentialsProvider({
       id: "telegram",
       name: "Telegram",
@@ -155,18 +154,44 @@ export const authOptions: NextAuthOptions = {
         }
       },
     }),
+  ];
+
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  providers.push(
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID ?? "",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     }),
+  );
+}
+
+if (process.env.APPLE_ID && process.env.APPLE_SECRET) {
+  providers.push(
     AppleProvider({
-      clientId: process.env.APPLE_ID ?? "",
-      clientSecret: process.env.APPLE_SECRET ?? "",
+      clientId: process.env.APPLE_ID,
+      clientSecret: process.env.APPLE_SECRET,
     }),
-    yandexProvider,
-    vkProvider,
-    sberProvider,
-  ],
+  );
+}
+
+if (process.env.YANDEX_CLIENT_ID && process.env.YANDEX_CLIENT_SECRET) {
+  providers.push(yandexProvider);
+}
+
+if (process.env.VK_CLIENT_ID && process.env.VK_CLIENT_SECRET) {
+  providers.push(vkProvider);
+}
+
+if (process.env.SBER_CLIENT_ID && process.env.SBER_CLIENT_SECRET) {
+  providers.push(sberProvider);
+}
+
+export const authOptions: NextAuthOptions = {
+  providers,
+  session: {
+    strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60,
+  },
   pages: {
     signIn: "/",
   },

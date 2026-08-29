@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { createWarriorServiceClient } from "@/lib/supabase/server-admin";
 import { createWarriorBrowserClient } from "@/lib/supabase/client";
 import {
   fetchFighterBySlug,
@@ -7,18 +6,20 @@ import {
   redactFighterForAnonymous,
 } from "@/lib/fighter-public";
 import { fetchActorRole } from "@/lib/api-actor";
+import { getApiSessionUserId } from "@/lib/api-session";
 
 type Ctx = { params: Promise<{ slug: string }> };
 
-/**
- * Public fighter card payload.
- * Privileged actor (admin/coach) gets full limited/private fields.
- */
 export async function GET(req: Request, ctx: Ctx) {
   const { slug } = await ctx.params;
-  const actorId = new URL(req.url).searchParams.get("actorId")?.trim();
+  if (!slug || slug.length > 64) {
+    return NextResponse.json(
+      { ok: false, message: "Боец не найден" },
+      { status: 404 },
+    );
+  }
 
-  const sb = createWarriorServiceClient() ?? createWarriorBrowserClient();
+  const sb = createWarriorBrowserClient();
   const raw =
     (sb ? await fetchFighterBySlug(sb, slug) : null) ??
     getDemoFighterBySlug(slug);
@@ -30,7 +31,8 @@ export async function GET(req: Request, ctx: Ctx) {
     );
   }
 
-  const role = await fetchActorRole(actorId);
+  const sessionId = await getApiSessionUserId();
+  const role = sessionId ? await fetchActorRole(sessionId) : null;
   const privileged = role === "admin" || role === "coach";
 
   if (privileged) {

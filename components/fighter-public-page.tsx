@@ -51,7 +51,7 @@ export default function FighterPublicPage({ profile, viewerRole }: Props) {
           comment,
           viewerId,
           fundraiserFallback: {
-            title: "Поддержка бойца",
+            title: profile.donationGoal ?? "Поддержка бойца",
             goalRub: 50000,
             raisedRub: Math.round(profile.donationsTotalKop / 100),
             pct: Math.min(
@@ -80,12 +80,12 @@ export default function FighterPublicPage({ profile, viewerRole }: Props) {
         setDonateBusy(false);
       }
     },
-    [viewerId, profile.id, profile.donationsTotalKop],
+    [viewerId, profile.id, profile.donationsTotalKop, profile.donationGoal],
   );
 
   const raisedRub = Math.round(profile.donationsTotalKop / 100);
   const fundraiser = {
-    title: "Поддержка бойца",
+    title: profile.donationGoal ?? "Поддержка бойца",
     goalRub: 50000,
     raisedRub,
     pct: Math.min(100, Math.round((raisedRub / 50000) * 100)),
@@ -124,6 +124,11 @@ export default function FighterPublicPage({ profile, viewerRole }: Props) {
         </div>
         <div className="min-w-0">
           <h1 className="truncate text-2xl font-bold">{profile.displayName}</h1>
+          {profile.nickname ? (
+            <p className="mt-0.5 truncate text-sm font-medium text-[#C9A84C]">
+              {profile.nickname}
+            </p>
+          ) : null}
           <p className="text-xs text-white/40">/{profile.slug}</p>
           {view.mode === "minimal" ? (
             <p className="mt-1 text-xs text-white/50">
@@ -177,6 +182,11 @@ export default function FighterPublicPage({ profile, viewerRole }: Props) {
           className="mb-4 w-full rounded-2xl border border-[#C9A84C]/40 bg-[#C9A84C]/10 px-4 py-4 text-left"
         >
           <p className="text-base font-bold text-[#C9A84C]">Поддержать бойца</p>
+          {profile.donationGoal ? (
+            <p className="mt-1 text-sm font-medium text-white/85">
+              {profile.donationGoal}
+            </p>
+          ) : null}
           <p className="mt-0.5 text-xs text-white/45">
             Донат доступен всегда · собрано {raisedRub.toLocaleString("ru-RU")} ₽
           </p>

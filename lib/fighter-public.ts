@@ -19,10 +19,14 @@ export const VERIFICATION_STATUS = [
 ] as const;
 export type VerificationStatus = (typeof VERIFICATION_STATUS)[number];
 
+export const DONATION_GOAL_MAX_LEN = 120;
+export const NICKNAME_MAX_LEN = 48;
+
 export type FighterPublicProfile = {
   id: string;
   slug: string;
   displayName: string;
+  nickname: string | null;
   role: WarriorRole;
   bio: string | null;
   avatarUrl: string | null;
@@ -30,6 +34,7 @@ export type FighterPublicProfile = {
   club: string | null;
   weightClass: string | null;
   donationsTotalKop: number;
+  donationGoal: string | null;
   bookingEnabled: boolean;
   visibility: ProfileVisibility;
   hideWeightClass: boolean;
@@ -102,6 +107,40 @@ function num(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function parseDonationGoal(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  if (!t) return null;
+  return t.slice(0, DONATION_GOAL_MAX_LEN);
+}
+
+function parseNickname(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  if (!t) return null;
+  return t.slice(0, NICKNAME_MAX_LEN);
+}
+
+const PROFILE_SELECT_BASE = [
+  "id",
+  "display_name",
+  "role",
+  "slug",
+  "bio",
+  "avatar_url",
+  "record",
+  "club",
+  "weight_class",
+  "donations_total",
+  "booking_enabled",
+  "visibility",
+  "hide_weight_class",
+  "hide_club",
+  "hide_bio",
+  "hide_record",
+  "verification_status",
+] as const;
+
 function mapRow(row: Record<string, unknown>): FighterPublicProfile | null {
   const id = typeof row.id === "string" ? row.id : null;
   const slug = typeof row.slug === "string" ? row.slug : null;
@@ -114,6 +153,7 @@ function mapRow(row: Record<string, unknown>): FighterPublicProfile | null {
       typeof row.display_name === "string" && row.display_name.trim()
         ? row.display_name
         : "Боец",
+    nickname: parseNickname(row.nickname),
     role: resolveWarriorRole(row.role),
     bio: typeof row.bio === "string" ? row.bio : null,
     avatarUrl: typeof row.avatar_url === "string" ? row.avatar_url : null,
@@ -122,6 +162,7 @@ function mapRow(row: Record<string, unknown>): FighterPublicProfile | null {
     weightClass:
       typeof row.weight_class === "string" ? row.weight_class : null,
     donationsTotalKop: num(row.donations_total),
+    donationGoal: parseDonationGoal(row.donation_goal),
     bookingEnabled: row.booking_enabled !== false,
     visibility: isProfileVisibility(row.visibility)
       ? row.visibility
@@ -136,15 +177,40 @@ function mapRow(row: Record<string, unknown>): FighterPublicProfile | null {
   };
 }
 
+const ROMANOV_DEMO: FighterPublicProfile = {
+  id: "WP-COACH-001",
+  slug: "romanov",
+  displayName: "Сергей Романов",
+  nickname: "Уличный Боец",
+  role: "coach",
+  bio: "MMA cage prep · sparring · fight camp.",
+  avatarUrl:
+    "https://images.unsplash.com/photo-1581009137042-c552e485697a?w=900&q=80",
+  record: null,
+  club: "БК «Кузня»",
+  weightClass: null,
+  donationsTotalKop: 0,
+  donationGoal: "Сборы в Краснодар",
+  bookingEnabled: true,
+  visibility: "public",
+  hideWeightClass: false,
+  hideClub: false,
+  hideBio: false,
+  hideRecord: false,
+  verificationStatus: "none",
+};
+
 /** Demo fallback when Supabase has no row / migrations not applied. */
 export function getDemoFighterBySlug(
   slug: string,
 ): FighterPublicProfile | null {
+  if (slug === "romanov") return { ...ROMANOV_DEMO };
   if (slug !== "king") return null;
   return {
     id: DEMO_FIGHTER_DB_ID,
     slug: "king",
     displayName: "King León",
+    nickname: null,
     role: "fighter",
     bio: "Демо-боец платформы Round 23. Промоушены: ACA, RCC, M-1 Global. Базовый зал — БК «Кузня».",
     avatarUrl: DEMO_FIGHTER_PORTRAIT,
@@ -152,6 +218,7 @@ export function getDemoFighterBySlug(
     club: DEMO_FIGHTER_CLUB,
     weightClass: DEMO_FIGHTER_WEIGHT_CLASS,
     donationsTotalKop: 0,
+    donationGoal: null,
     bookingEnabled: true,
     visibility: "public",
     hideWeightClass: false,
@@ -194,35 +261,59 @@ export async function fetchFighterBySlug(
   const normalized = normalizedRaw;
   if (!normalized) return null;
 
-  const { data, error } = await client
+  const extras = ["donation_goal", "nickname"];
+  let selectCols = [...PROFILE_SELECT_BASE, ...extras];
+  let query = await client
     .from("profiles")
-    .select(
-      [
-        "id",
-        "display_name",
-        "role",
-        "slug",
-        "bio",
-        "avatar_url",
-        "record",
-        "club",
-        "weight_class",
-        "donations_total",
-        "booking_enabled",
-        "visibility",
-        "hide_weight_class",
-        "hide_club",
-        "hide_bio",
-        "hide_record",
-        "verification_status",
-      ].join(", "),
-    )
+    .select(selectCols.join(", "))
     .eq("slug", normalized)
     .maybeSingle();
+
+  if (query.error) {
+    const missing = extras.find((col) =>
+      new RegExp(col, "i").test(query.error?.message ?? ""),
+    );
+    if (missing) {
+      selectCols = selectCols.filter((col) => col !== missing);
+      query = await client
+        .from("profiles")
+        .select(selectCols.join(", "))
+        .eq("slug", normalized)
+        .maybeSingle();
+    }
+    if (
+      query.error &&
+      extras.some((col) => new RegExp(col, "i").test(query.error?.message ?? ""))
+    ) {
+      query = await client
+        .from("profiles")
+        .select(PROFILE_SELECT_BASE.join(", "))
+        .eq("slug", normalized)
+        .maybeSingle();
+    }
+  }
+
+  const { data, error } = query;
 
   if (!error && data && typeof data === "object") {
     const mapped = mapRow(data as unknown as Record<string, unknown>);
     if (mapped) {
+      if (normalized === "romanov" || mapped.id === "WP-COACH-001") {
+        const demo = getDemoFighterBySlug("romanov")!;
+        return {
+          ...mapped,
+          slug: mapped.slug || "romanov",
+          donationGoal: mapped.donationGoal ?? demo.donationGoal,
+          nickname: mapped.nickname ?? demo.nickname,
+          displayName:
+            mapped.displayName === "Боец" || !mapped.displayName.trim()
+              ? demo.displayName
+              : mapped.displayName,
+          avatarUrl: mapped.avatarUrl ?? demo.avatarUrl,
+          club: mapped.club ?? demo.club,
+          bio: mapped.bio ?? demo.bio,
+        };
+      }
       // Fill empty public card fields from showcase demo.
       if (normalized === "king" || mapped.id === DEMO_FIGHTER_DB_ID) {
         const demo = getDemoFighterBySlug("king")!;
@@ -283,6 +374,8 @@ export type PrivacyPatch = {
   bio?: string | null;
   avatarUrl?: string | null;
   record?: string | null;
+  donationGoal?: string | null;
+  nickname?: string | null;
 };
 
 export function privacyPatchToRow(
@@ -301,6 +394,13 @@ export function privacyPatchToRow(
   if (patch.bio !== undefined) row.bio = patch.bio;
   if (patch.avatarUrl !== undefined) row.avatar_url = patch.avatarUrl;
   if (patch.record !== undefined) row.record = patch.record;
+  if (patch.donationGoal !== undefined) {
+    const goal = parseDonationGoal(patch.donationGoal);
+    row.donation_goal = goal;
+  }
+  if (patch.nickname !== undefined) {
+    row.nickname = parseNickname(patch.nickname);
+  }
   row.updated_at = new Date().toISOString();
   return row;
 }

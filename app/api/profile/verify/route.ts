@@ -1,39 +1,40 @@
 import { NextResponse } from "next/server";
 import { createWarriorServiceClient } from "@/lib/supabase/server-admin";
-import { createWarriorBrowserClient } from "@/lib/supabase/client";
-import { requireBoundUserId } from "@/lib/api-session";
+import { requireBoundUserId, isLiveEconomyLocked } from "@/lib/api-session";
+import { hashedClientKey, jsonError, readJsonBody, safeDbMessage } from "@/lib/api-request";
+import { rateLimit } from "@/lib/rate-limit";
 
-/**
- * AI-KYC stub: accepts a document filename and marks verification_status=pending.
- * profileId must match the authenticated session (or demo gate).
- */
 export async function POST(req: Request) {
-  let body: { profileId?: string; fileName?: string };
-  try {
-    body = (await req.json()) as { profileId?: string; fileName?: string };
-  } catch {
-    return NextResponse.json({ ok: false, message: "Invalid JSON" }, { status: 400 });
-  }
+  const limited = rateLimit({
+    key: `verify:${hashedClientKey(req)}`,
+    limit: 8,
+    windowMs: 60_000,
+  });
+  if (!limited.ok) return jsonError("Слишком много запросов", 429);
 
-  const claimed = body.profileId?.trim() ?? "";
+  const parsed = await readJsonBody<{ profileId?: string; fileName?: string }>(req);
+  if (!parsed.ok) return jsonError(parsed.message, parsed.status);
+
+  const claimed = parsed.body.profileId?.trim() ?? "";
   const bound = await requireBoundUserId(claimed || null);
   if (!bound.ok) {
-    return NextResponse.json(
-      { ok: false, message: bound.message },
-      { status: bound.status },
-    );
+    return jsonError(bound.message, bound.status);
   }
   const profileId = bound.userId;
 
-  if (!body.fileName?.trim()) {
-    return NextResponse.json(
-      { ok: false, message: "Загрузите файл документа" },
-      { status: 400 },
-    );
+  const fileName = parsed.body.fileName?.trim() ?? "";
+  if (!fileName || fileName.length > 200) {
+    return jsonError("Загрузите файл документа", 400);
+  }
+  if (!/\.(pdf|jpe?g|png|webp)$/i.test(fileName)) {
+    return jsonError("Допустимы PDF, JPG, PNG, WEBP", 400);
   }
 
-  const sb = createWarriorServiceClient() ?? createWarriorBrowserClient();
+  const sb = createWarriorServiceClient();
   if (!sb) {
+    if (isLiveEconomyLocked()) {
+      return jsonError("Нужен SUPABASE_SERVICE_ROLE_KEY", 503);
+    }
     return NextResponse.json({
       ok: true,
       mock: true,
@@ -51,10 +52,7 @@ export async function POST(req: Request) {
     .eq("id", profileId);
 
   if (error) {
-    return NextResponse.json(
-      { ok: false, message: error.message },
-      { status: 502 },
-    );
+    return jsonError(safeDbMessage(error.message), 502);
   }
 
   return NextResponse.json({

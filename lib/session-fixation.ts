@@ -62,6 +62,8 @@ export type FixationSession = {
   rejectionReason?: string;
   /** Estimated gross for economy sync (from booking or default). */
   grossRub: number;
+  /** Paid marketplace intent — required in live economy. */
+  paymentId?: string;
 };
 
 export type TrainerQrPayload = {
@@ -148,6 +150,7 @@ export type CreateSessionInput = {
   gymId: string;
   gymName: string;
   grossRub?: number;
+  paymentId?: string;
 };
 
 /** Step 1 — create session key locally before training. */
@@ -168,6 +171,7 @@ export function createPendingSession(
     expiresAt,
     status: "pending",
     grossRub: input.grossRub ?? 2_000,
+    paymentId: input.paymentId,
   };
 
   upsertSession(session);

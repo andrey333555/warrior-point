@@ -6,8 +6,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { advanceFighterXp, recordTrainingSessionRub } from "@/lib/economy";
-import { getXp } from "@/lib/xp";
+import { addBooking } from "@/lib/bookings";
 import {
   getAwaitingSyncSessions,
   markSessionRejected,
@@ -15,7 +14,6 @@ import {
   validateFixationForSync,
   type FixationSession,
 } from "@/lib/session-fixation";
-import { applyCheckInRewards } from "@/lib/check-in-rewards";
 import { resolveTrainerCheckInSite } from "@/lib/verify";
 
 export type FixationSyncResult = {
@@ -24,16 +22,6 @@ export type FixationSyncResult = {
   errors: string[];
 };
 
-function toVerifyDetails(session: FixationSession): string {
-  const method = session.confirmMethod ?? "manual_code";
-  const labels: Record<string, string> = {
-    qr_offline: "📱 QR offline",
-    bluetooth: "📡 Bluetooth",
-    manual_code: "🔢 Код тренера",
-  };
-  return `${labels[method] ?? method} · key ${session.sessionKey}`;
-}
-
 async function postFixationToServer(
   session: FixationSession,
 ): Promise<{ error: Error | null }> {
@@ -41,7 +29,10 @@ async function postFixationToServer(
     const res = await fetch("/api/fixation/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ session }),
+      body: JSON.stringify({
+        session,
+        paymentId: session.paymentId,
+      }),
     });
 
     if (res.ok) return { error: null };
@@ -57,10 +48,6 @@ async function postFixationToServer(
   }
 }
 
-/**
- * Flush all confirmed-but-unsynced fixation sessions.
- * Only system-verified sessions reach XP / rating / history.
- */
 export async function syncConfirmedFixations(
   _client: SupabaseClient,
   fighterId: string,
@@ -82,22 +69,25 @@ export async function syncConfirmedFixations(
       continue;
     }
 
-    const economics = recordTrainingSessionRub(session.grossRub);
-    const advancement = advanceFighterXp(getXp().total, economics.xpAward);
-
-    const site = resolveTrainerCheckInSite(session.trainerId);
-    applyCheckInRewards(site, 0, {
-      method: session.verifyMethod ?? "code",
-      confidence: "high",
-      details: toVerifyDetails(session),
-    });
-
     const { error } = await postFixationToServer(session);
 
     if (error) {
       errors.push(`${session.sessionKey}: ${error.message}`);
       continue;
     }
+
+    const site = resolveTrainerCheckInSite(session.trainerId);
+    addBooking({
+      trainerId: site.trainerIdNum,
+      trainerName: site.trainerName,
+      gymName: site.gymName,
+      date: "Сегодня",
+      time: new Date().toLocaleTimeString("ru-RU", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      type: "split",
+    });
 
     markSessionSynced(session.sessionKey);
     synced++;

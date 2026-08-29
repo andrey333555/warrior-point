@@ -1,29 +1,41 @@
 import { NextResponse } from "next/server";
 import { getPaymentIntent } from "@/lib/payments/store";
 import { buildPaymentSettlement } from "@/lib/payments/settle";
+import { requireBoundUserId } from "@/lib/api-session";
+import { hashedClientKey, jsonError, readJsonBody } from "@/lib/api-request";
+import { rateLimit } from "@/lib/rate-limit";
+
+export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  let paymentId: string | undefined;
-  try {
-    const body = (await req.json()) as { paymentId?: string };
-    paymentId = body.paymentId;
-  } catch {
-    return NextResponse.json({ ok: false, message: "Invalid JSON" }, { status: 400 });
+  const limited = rateLimit({
+    key: `pay-confirm:${hashedClientKey(req)}`,
+    limit: 40,
+    windowMs: 60_000,
+  });
+  if (!limited.ok) return jsonError("Слишком много запросов", 429);
+
+  const parsed = await readJsonBody<{ paymentId?: string }>(req);
+  if (!parsed.ok) return jsonError(parsed.message, parsed.status);
+
+  const paymentId =
+    typeof parsed.body.paymentId === "string" ? parsed.body.paymentId.trim() : "";
+  if (!paymentId || paymentId.length > 128) {
+    return jsonError("paymentId обязателен", 400);
   }
 
-  if (!paymentId) {
-    return NextResponse.json(
-      { ok: false, message: "paymentId обязателен" },
-      { status: 400 },
-    );
+  const bound = await requireBoundUserId(null);
+  if (!bound.ok) {
+    return jsonError(bound.message, bound.status);
   }
 
   const intent = await getPaymentIntent(paymentId);
   if (!intent) {
-    return NextResponse.json(
-      { ok: false, message: "Платёж не найден" },
-      { status: 404 },
-    );
+    return jsonError("Платёж не найден", 404);
+  }
+
+  if (intent.fighterId && intent.fighterId !== bound.userId) {
+    return jsonError("Чужой платёж", 403);
   }
 
   if (intent.status !== "succeeded") {

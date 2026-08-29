@@ -6,13 +6,10 @@ import {
   getDemoFighterBySlug,
   redactFighterForAnonymous,
 } from "@/lib/fighter-public";
-import { createWarriorServiceClient } from "@/lib/supabase/server-admin";
-
 type Props = { params: Promise<{ slug: string }> };
 
 async function loadProfile(slug: string) {
-  const service = createWarriorServiceClient();
-  const client = service ?? createWarriorBrowserClient();
+  const client = createWarriorBrowserClient();
   if (!client) return getDemoFighterBySlug(slug);
   return fetchFighterBySlug(client, slug);
 }

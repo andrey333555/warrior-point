@@ -23,9 +23,11 @@ export type ServerTrainerQrPayload = {
  */
 
 function checkinSecret(): string | null {
-  const secret =
-    process.env.CHECKIN_SECRET?.trim() || process.env.NEXTAUTH_SECRET?.trim();
-  return secret || null;
+  const dedicated = process.env.CHECKIN_SECRET?.trim();
+  if (dedicated) return dedicated;
+  // Production must not reuse the session secret for gym codes.
+  if (process.env.NODE_ENV === "production") return null;
+  return process.env.NEXTAUTH_SECRET?.trim() || null;
 }
 
 export function isCheckinSecretConfigured(): boolean {

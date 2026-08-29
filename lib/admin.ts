@@ -7,6 +7,10 @@
  * WARRIOR_ADMIN_SECRET — never this flag alone.
  */
 export function isWarriorAdminMode(): boolean {
+  if (process.env.NODE_ENV === "production") {
+    return process.env.NEXT_PUBLIC_WARRIOR_ADMIN === "1";
+  }
+
   if (typeof window !== "undefined") {
     const params = new URLSearchParams(window.location.search);
     const flag = params.get("admin");

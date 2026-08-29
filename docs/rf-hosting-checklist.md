@@ -5,7 +5,7 @@
 
 ## 1. Перед переносом
 
-- [ ] Применить миграции `supabase/migrations/0001` … `0022` (+ `schema.sql` на пустой БД)
+- [ ] Применить миграции `supabase/migrations/0001` … `0023` (+ `schema.sql` на пустой БД)
 - [ ] Скопировать env с Vercel → `.env` на сервере (см. ниже)
 - [ ] `NEXTAUTH_URL` = ваш РФ-домен `https://…`
 - [ ] OAuth redirect URI обновить на РФ-домен
@@ -20,6 +20,9 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 NEXTAUTH_SECRET=
 NEXTAUTH_URL=https://your-rf-domain.ru
+LIVE_ECONOMY_LOCK=1
+CHECKIN_SECRET=
+WARRIOR_ADMIN_SECRET=
 YOOKASSA_SHOP_ID=          # когда нужна живая оплата
 YOOKASSA_SECRET_KEY=
 TELEGRAM_BOT_TOKEN=        # если Telegram-вход
@@ -59,7 +62,7 @@ docker compose up --build -d
 - [ ] `https://<domain>/settings` — приватность
 - [ ] `https://<domain>/admin?admin=1` — список профилей
 - [ ] `https://<domain>/verify` — KYC stub
-- [ ] Оплата mock / ЮKassa + webhook
+- [ ] Оплата ЮKassa + webhook (mock в production отключён)
 
 ## 7. Не делается без доступов к облаку
 
