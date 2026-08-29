@@ -12,11 +12,9 @@ const SLUG_TO_TRAINER: Record<string, number> = {
   king: 1,
 };
 
-/** Public card CTA: open booking pre-filtered to this fighter slug. */
-export function resolveBookingHref(slug?: string | null): string {
-  const s = (slug ?? "").trim().toLowerCase();
-  if (s) return `/booking?coach=${encodeURIComponent(s)}`;
-  return "/booking";
+/** Public fighter card CTA: skip the intermediate booking catalogue. */
+export function resolveBookingHref(_slug?: string | null): string {
+  return "/booking/1";
 }
 
 export function resolveTrainerIdForCoachSlug(
