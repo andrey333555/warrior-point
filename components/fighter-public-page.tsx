@@ -154,7 +154,7 @@ export default function FighterPublicPage({ profile, viewerRole }: Props) {
 
       {view.showBooking ? (
         <Link
-          href={resolveBookingHref(profile.id)}
+          href={resolveBookingHref(profile.slug)}
           className="mb-3 flex w-full items-center justify-between rounded-2xl px-4 py-4 text-left"
           style={{ background: "rgba(201,168,76,0.9)", color: "#0A0A0A" }}
         >
