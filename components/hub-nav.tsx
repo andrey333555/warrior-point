@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { HIDE_NAV_CLASS, useDonateUi } from "@/hooks/use-donate-ui";
 import type { FeedCategory } from "@/components/feed/types";
 
@@ -14,7 +14,7 @@ type HubLink = {
 };
 
 const LINKS: HubLink[] = [
-  { id: "feed", href: "/", label: "Главная" },
+  { id: "feed", href: "/?tab=feed", label: "Главная" },
   { id: "passport", href: "/?tab=passport", label: "Паспорт" },
   { id: "leaderboard", href: "/?tab=leaderboard", label: "Топ" },
   { id: "map", href: "/map", label: "Карты", variant: "map" },
@@ -43,6 +43,7 @@ function resolveActiveTab(pathname: string, tab: string | null): FeedCategory | 
  */
 export function HubNav() {
   const pathname = usePathname() ?? "";
+  const router = useRouter();
   const searchParams = useSearchParams();
   const { isNavHidden } = useDonateUi();
   const [hidden, setHidden] = useState(false);
@@ -94,8 +95,20 @@ export function HubNav() {
             <Link
               key={item.id}
               href={item.href}
+              replace
+              scroll={false}
               aria-current={isActive ? "page" : undefined}
               className={isActive ? activeClass : idleClass}
+              onClick={(event) => {
+                if (item.id === active) {
+                  event.preventDefault();
+                  return;
+                }
+                if (normalizePath(pathname) === "/" && item.id !== "map") {
+                  event.preventDefault();
+                  router.replace(item.href);
+                }
+              }}
             >
               {item.label}
             </Link>

@@ -141,6 +141,19 @@ const PROFILE_SELECT_BASE = [
   "verification_status",
 ] as const;
 
+function applyKnownCardDefaults(
+  profile: FighterPublicProfile,
+): FighterPublicProfile {
+  if (profile.slug === "romanov") {
+    return {
+      ...profile,
+      nickname: profile.nickname ?? "Уличный Боец",
+      donationGoal: profile.donationGoal ?? "Сборы в Краснодар",
+    };
+  }
+  return profile;
+}
+
 function mapRow(row: Record<string, unknown>): FighterPublicProfile | null {
   const id = typeof row.id === "string" ? row.id : null;
   const slug = typeof row.slug === "string" ? row.slug : null;
@@ -253,6 +266,52 @@ export function redactFighterForAnonymous(
   };
 }
 
+async function fetchCardExtras(
+  client: SupabaseClient,
+  slug: string,
+): Promise<{ nickname: string | null; donationGoal: string | null }> {
+  const extras = { nickname: null as string | null, donationGoal: null as string | null };
+  const { data, error } = await client
+    .from("profiles")
+    .select("nickname, donation_goal")
+    .eq("slug", slug)
+    .maybeSingle();
+
+  if (!error && data && typeof data === "object") {
+    extras.nickname = parseNickname(
+      (data as { nickname?: unknown }).nickname,
+    );
+    extras.donationGoal = parseDonationGoal(
+      (data as { donation_goal?: unknown }).donation_goal,
+    );
+    return extras;
+  }
+
+  const nick = await client
+    .from("profiles")
+    .select("nickname")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (!nick.error && nick.data) {
+    extras.nickname = parseNickname(
+      (nick.data as { nickname?: unknown }).nickname,
+    );
+  }
+
+  const goal = await client
+    .from("profiles")
+    .select("donation_goal")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (!goal.error && goal.data) {
+    extras.donationGoal = parseDonationGoal(
+      (goal.data as { donation_goal?: unknown }).donation_goal,
+    );
+  }
+
+  return extras;
+}
+
 export async function fetchFighterBySlug(
   client: SupabaseClient,
   slug: string,
@@ -261,50 +320,29 @@ export async function fetchFighterBySlug(
   const normalized = normalizedRaw;
   if (!normalized) return null;
 
-  const extras = ["donation_goal", "nickname"];
-  let selectCols = [...PROFILE_SELECT_BASE, ...extras];
-  let query = await client
+  const query = await client
     .from("profiles")
-    .select(selectCols.join(", "))
+    .select(PROFILE_SELECT_BASE.join(", "))
     .eq("slug", normalized)
     .maybeSingle();
 
-  if (query.error) {
-    const missing = extras.find((col) =>
-      new RegExp(col, "i").test(query.error?.message ?? ""),
-    );
-    if (missing) {
-      selectCols = selectCols.filter((col) => col !== missing);
-      query = await client
-        .from("profiles")
-        .select(selectCols.join(", "))
-        .eq("slug", normalized)
-        .maybeSingle();
-    }
-    if (
-      query.error &&
-      extras.some((col) => new RegExp(col, "i").test(query.error?.message ?? ""))
-    ) {
-      query = await client
-        .from("profiles")
-        .select(PROFILE_SELECT_BASE.join(", "))
-        .eq("slug", normalized)
-        .maybeSingle();
-    }
-  }
-
   const { data, error } = query;
+  const extras = await fetchCardExtras(client, normalized);
 
   if (!error && data && typeof data === "object") {
-    const mapped = mapRow(data as unknown as Record<string, unknown>);
+    const mapped = mapRow({
+      ...(data as Record<string, unknown>),
+      nickname: extras.nickname,
+      donation_goal: extras.donationGoal,
+    });
     if (mapped) {
       if (normalized === "romanov" || mapped.id === "WP-COACH-001") {
         const demo = getDemoFighterBySlug("romanov")!;
-        return {
+        return applyKnownCardDefaults({
           ...mapped,
           slug: mapped.slug || "romanov",
-          donationGoal: mapped.donationGoal ?? demo.donationGoal,
-          nickname: mapped.nickname ?? demo.nickname,
+          donationGoal: mapped.donationGoal ?? extras.donationGoal ?? demo.donationGoal,
+          nickname: mapped.nickname ?? extras.nickname ?? demo.nickname,
           displayName:
             mapped.displayName === "Боец" || !mapped.displayName.trim()
               ? demo.displayName
@@ -312,7 +350,7 @@ export async function fetchFighterBySlug(
           avatarUrl: mapped.avatarUrl ?? demo.avatarUrl,
           club: mapped.club ?? demo.club,
           bio: mapped.bio ?? demo.bio,
-        };
+        });
       }
       // Fill empty public card fields from showcase demo.
       if (normalized === "king" || mapped.id === DEMO_FIGHTER_DB_ID) {
@@ -331,7 +369,7 @@ export async function fetchFighterBySlug(
               : mapped.displayName,
         };
       }
-      return mapped;
+      return applyKnownCardDefaults(mapped);
     }
   }
 
@@ -360,7 +398,8 @@ export async function fetchFighterBySlug(
     }
   }
 
-  return getDemoFighterBySlug(normalized);
+  const fallback = getDemoFighterBySlug(normalized);
+  return fallback ? applyKnownCardDefaults(fallback) : null;
 }
 
 export type PrivacyPatch = {
