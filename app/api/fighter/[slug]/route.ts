@@ -4,11 +4,22 @@ import {
   fetchFighterBySlug,
   getDemoFighterBySlug,
   redactFighterForAnonymous,
+  type FighterPublicProfile,
 } from "@/lib/fighter-public";
 import { fetchActorRole } from "@/lib/api-actor";
 import { getApiSessionUserId } from "@/lib/api-session";
 
+export const dynamic = "force-dynamic";
+
 type Ctx = { params: Promise<{ slug: string }> };
+
+function withCardFields(profile: FighterPublicProfile): FighterPublicProfile {
+  return {
+    ...profile,
+    nickname: profile.nickname ?? null,
+    donationGoal: profile.donationGoal ?? null,
+  };
+}
 
 export async function GET(req: Request, ctx: Ctx) {
   const { slug } = await ctx.params;
@@ -36,11 +47,11 @@ export async function GET(req: Request, ctx: Ctx) {
   const privileged = role === "admin" || role === "coach";
 
   if (privileged) {
-    return NextResponse.json({ ok: true, profile: raw });
+    return NextResponse.json({ ok: true, profile: withCardFields(raw) });
   }
 
   return NextResponse.json({
     ok: true,
-    profile: redactFighterForAnonymous(raw),
+    profile: withCardFields(redactFighterForAnonymous(raw)),
   });
 }

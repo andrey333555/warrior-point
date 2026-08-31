@@ -6,6 +6,9 @@ import {
   getDemoFighterBySlug,
   redactFighterForAnonymous,
 } from "@/lib/fighter-public";
+
+export const dynamic = "force-dynamic";
+
 type Props = { params: Promise<{ slug: string }> };
 
 async function loadProfile(slug: string) {
