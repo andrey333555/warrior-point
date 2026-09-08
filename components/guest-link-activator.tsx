@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { activateGuestMode } from "@/hooks/use-warrior-auth";
+import { activateGuestMode, isGuestModeActive } from "@/hooks/use-warrior-auth";
 
 /** Reads ?guest=1 or ?demo=1 from share links and enters guest mode. */
 export function GuestLinkActivator() {
@@ -15,15 +15,11 @@ export function GuestLinkActivator() {
       searchParams.get("preview") === "1";
 
     if (!guest) return;
+    if (isGuestModeActive()) return;
 
     activateGuestMode();
-
-    const url = new URL(window.location.href);
-    url.searchParams.delete("guest");
-    url.searchParams.delete("demo");
-    url.searchParams.delete("preview");
-    const next = `${url.pathname}${url.search}${url.hash}`;
-    window.history.replaceState(null, "", next || "/");
+    // Keep ?guest=1 in the URL so refresh / Soft nav never fall back to AuthGate
+    // while auth is still hydrating. Share links stay shareable.
   }, [searchParams]);
 
   return null;

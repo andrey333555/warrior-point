@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "stop": [
+      {
+        "command": ".cursor/hooks/typecheck.sh",
+        "timeout": 180,
+        "loop_limit": 1
+      }
+    ]
+  }
+}

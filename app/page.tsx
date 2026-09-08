@@ -2,17 +2,34 @@
 
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { useWarriorAuth, deactivateGuestMode } from "@/hooks/use-warrior-auth";
+import {
+  useWarriorAuth,
+  deactivateGuestMode,
+  isGuestModeActive,
+} from "@/hooks/use-warrior-auth";
 import { AuthGate } from "@/components/auth-gate";
 import { TacticalOS } from "@/components/tactical-os";
 import HomeHub from "@/components/home-hub";
+import { DEMO_FIGHTER_DB_ID } from "@/lib/warrior-constants";
+
+function hasGuestQuery(searchParams: URLSearchParams): boolean {
+  return (
+    searchParams.get("guest") === "1" ||
+    searchParams.get("demo") === "1" ||
+    searchParams.get("preview") === "1"
+  );
+}
 
 function HomeShell() {
   const auth = useWarriorAuth();
   const searchParams = useSearchParams();
   const tab = searchParams.get("tab");
+  const guestIntent =
+    hasGuestQuery(searchParams) ||
+    (typeof window !== "undefined" && isGuestModeActive());
 
-  if (auth.status === "loading") {
+  // ?guest=1 / wp_guest_mode must never sit on «Загрузка…» or AuthGate.
+  if (auth.status === "loading" && !guestIntent) {
     return (
       <div
         className="flex min-h-screen items-center justify-center"
@@ -28,20 +45,24 @@ function HomeShell() {
     );
   }
 
-  if (auth.status === "unauthenticated") {
+  if (auth.status === "unauthenticated" && !guestIntent) {
     return <AuthGate />;
   }
 
-  const inGuestMode = auth.guestMode ?? auth.devBypass;
+  const inGuestMode =
+    guestIntent ||
+    (auth.status === "authenticated" &&
+      Boolean(auth.guestMode ?? auth.devBypass));
+  const fighterId =
+    auth.status === "authenticated" ? auth.user.id : DEMO_FIGHTER_DB_ID;
 
-  // Passport / leaderboard keep the previous TacticalOS shell
   if (tab === "passport" || tab === "leaderboard") {
     return (
       <>
         {inGuestMode ? (
           <GuestBadge onClick={deactivateGuestMode} />
         ) : null}
-        <TacticalOS fighterId={auth.user.id} />
+        <TacticalOS fighterId={fighterId} />
       </>
     );
   }

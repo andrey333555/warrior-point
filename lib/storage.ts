@@ -57,6 +57,7 @@ export const STORAGE_KEYS = {
   trainerFavorites: "wp.trainers.favorites.v1",
   theme: "wp.theme.v1",
   privacy: "wp.profile.privacy.v1",
+  fighterOnboarding: "wp.fighter.onboarding.v1",
   chat: (trainerId: number) => `wp.chat.${trainerId}.v1`,
 } as const;
 

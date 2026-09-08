@@ -5,7 +5,7 @@
  * Presets + «Другая» · СБП для любого пользователя (без входа).
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { HexAvatar } from "@/components/hex-avatar";
@@ -64,6 +64,8 @@ export interface DonateModalProps {
   error?: string | null;
   onDonate: DonatePaymentHandler;
   onSuccess?: DonateSuccessHandler;
+  /** Prefill from fundraising quick-amount buttons. */
+  initialAmount?: number;
 }
 
 export function DonateModal({
@@ -77,6 +79,7 @@ export function DonateModal({
   error,
   onDonate,
   onSuccess,
+  initialAmount,
 }: DonateModalProps) {
   const [screen, setScreen] = useState<Screen>("pick");
   const [amount, setAmount] = useState(300);
@@ -99,15 +102,21 @@ export function DonateModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose, screen]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (open) {
       setScreen("pick");
-      setAmount(300);
-      setAmountMode("preset");
+      const preset =
+        initialAmount && initialAmount >= 50 ? initialAmount : 300;
+      setAmount(preset);
+      setAmountMode(
+        (QUICK_AMOUNTS as readonly number[]).includes(preset)
+          ? "preset"
+          : "custom",
+      );
       setComment("");
       setDonePayload(null);
     }
-  }, [open]);
+  }, [open, initialAmount]);
 
   const handleAmountInput = useCallback((raw: string) => {
     const digits = raw.replace(/\D/g, "");

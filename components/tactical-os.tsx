@@ -53,6 +53,11 @@ import {
   saveCalibration,
 } from "@/lib/calibration-store";
 import type { WarriorCalibration } from "@/lib/calibration";
+import {
+  loadFighterOnboarding,
+  STYLE_LABELS,
+  type FighterOnboardingData,
+} from "@/lib/fighter-onboarding";
 
 type Role = "fighter" | "coach" | "athlete";
 
@@ -95,6 +100,11 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
   const [sessionsCount, setSessionsCount] = useState(0);
   const [echo, setEcho] = useState<string | null>(null);
   const [calibration, setCalibration] = useState<WarriorCalibration | null>(null);
+  const [onboard, setOnboard] = useState<FighterOnboardingData | null>(null);
+
+  useEffect(() => {
+    setOnboard(loadFighterOnboarding());
+  }, []);
 
   useEffect(() => {
     if (isDemo && !getCalibration(fighterId)) {
@@ -170,6 +180,12 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
       ? ["HEAD COACH", "КУЗНЯ", `${netPct}% НЕТТО`]
       : role === "athlete"
       ? ["MEMBER", "KRASNODAR", `LVL ${athleteLevel}`]
+      : onboard
+      ? [
+          (STYLE_LABELS[onboard.style] ?? onboard.style).toUpperCase(),
+          onboard.club.split("·")[0]?.trim().toUpperCase() || "WARRIOR POINT",
+          onboard.city ? onboard.city.toUpperCase() : "WARRIOR POINT",
+        ]
       : calibration
       ? [
           getSkillTierMeta(calibration.skillTier).label.toUpperCase(),
@@ -181,21 +197,25 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
       : ["WARRIOR POINT", "ROOKIE", "UNRANKED"];
 
   const stats: PassportStats = {
-    name: isDemo ? DEMO_FIGHTER_DISPLAY_NAME : displayName,
-    nickname: role === "fighter" && isDemo ? "Jaguar" : undefined,
+    name: onboard?.name ?? (isDemo ? DEMO_FIGHTER_DISPLAY_NAME : displayName),
+    nickname:
+      onboard?.nickname ??
+      (role === "fighter" && isDemo ? "Jaguar" : undefined),
     tags,
     combatScore: isDemo ? 92.4 : combatScore(realLevel, 1400 + Math.round(totalXp / 12)),
     level: role === "athlete" ? athleteLevel : fighterLevel,
     maxLevel: MAX_LEVEL,
-    proRecord: calibration
+    proRecord: onboard?.record
+      ? onboard.record
+      : calibration
       ? formatRecord(calibration.record)
       : isDemo
         ? "27-4-1"
         : "0-0-0",
     recordMethods: isDemo ? { ko: 7, dec: 5, sub: 15 } : { ko: 0, dec: 0, sub: 0 },
     elo: calibration?.startingElo ?? (isDemo ? 1642 : 1400 + Math.round(totalXp / 12)),
-    weightKg: isDemo ? 70.3 : 70.0,
-    heightCm: isDemo ? 178 : 175,
+    weightKg: onboard?.weight ?? (isDemo ? 70.3 : 70.0),
+    heightCm: onboard?.height ?? (isDemo ? 178 : 175),
     reachCm: isDemo ? 182 : 178,
     age: isDemo ? 28 : 25,
     streakDays: isDemo ? 28 : 0,

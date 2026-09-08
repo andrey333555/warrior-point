@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import InviteWelcome from "@/components/invite-welcome";
 import StoriesViewer from "@/components/stories-viewer";
 import { STORY_RINGS } from "@/lib/stories";
+import RegisterCTAPopup from "@/components/RegisterCTAPopup";
+import SocialProofBanner from "@/components/SocialProofBanner";
+import TopFightersShowcase from "@/components/TopFightersShowcase";
+import { useWarriorAuth } from "@/hooks/use-warrior-auth";
 
 // ═══════════════════════════════════════════════════════════════
 // ДАННЫЕ (mock → Supabase)
@@ -68,6 +72,10 @@ const DEMO_USER: UserData = {
 
 export default function HomeHub() {
   const router = useRouter();
+  const auth = useWarriorAuth();
+  const isGuest = Boolean(
+    auth.status === "authenticated" && (auth.guestMode ?? auth.devBypass),
+  );
   const [user] = useState<UserData>(DEMO_USER);
   const [activeStoryId, setActiveStoryId] = useState<string | null>(null);
   const [seenIds, setSeenIds] = useState<Set<string>>(() => new Set());
@@ -95,7 +103,7 @@ export default function HomeHub() {
 
       <Suspense fallback={null}>
         <div className="relative z-20 pt-3">
-          <InviteWelcome variant="banner" />
+          <InviteWelcome variant="modal" />
         </div>
       </Suspense>
 
@@ -170,6 +178,8 @@ export default function HomeHub() {
             </button>
           </div>
         </div>
+
+        <SocialProofBanner />
 
         <div className="relative px-4 pb-4">
           <button
@@ -391,6 +401,10 @@ export default function HomeHub() {
           ))}
         </div>
       </div>
+
+      {isGuest ? <TopFightersShowcase /> : null}
+
+      {isGuest ? <RegisterCTAPopup /> : null}
     </div>
   );
 }

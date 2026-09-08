@@ -33,6 +33,7 @@ export const GUEST_MODE_KEY = "wp_guest_mode";
 export const DEV_BYPASS_KEY = "wp_dev_bypass";
 
 const OAUTH_LOADING_CAP_MS = 2800;
+const SUPABASE_LOADING_CAP_MS = 2500;
 
 export function isGuestModeActive(): boolean {
   if (typeof window === "undefined") return false;
@@ -41,6 +42,25 @@ export function isGuestModeActive(): boolean {
       localStorage.getItem(GUEST_MODE_KEY) === "1" ||
       localStorage.getItem(DEV_BYPASS_KEY) === "1"
     );
+  } catch {
+    return false;
+  }
+}
+
+/** Sync: ?guest=1 / localStorage — avoids stuck «Загрузка…» before effects run. */
+function readGuestIntentFromClient(): boolean {
+  if (typeof window === "undefined") return false;
+  if (isGuestModeActive()) return true;
+  try {
+    const sp = new URLSearchParams(window.location.search);
+    const want =
+      sp.get("guest") === "1" ||
+      sp.get("demo") === "1" ||
+      sp.get("preview") === "1";
+    if (!want) return false;
+    localStorage.setItem(GUEST_MODE_KEY, "1");
+    localStorage.setItem(DEV_BYPASS_KEY, "1");
+    return true;
   } catch {
     return false;
   }
@@ -132,15 +152,21 @@ function guestAuthState(): AuthState {
 
 export function useWarriorAuth(): AuthState {
   const { data: oauthSession, status: oauthStatus } = useSession();
-  const [hydrated, setHydrated] = useState(false);
-  const [guestMode, setGuestMode] = useState(false);
+  // Client sync init: guest URL/localStorage must not wait on effects (infinite spinner).
+  const [guestMode, setGuestMode] = useState(readGuestIntentFromClient);
+  const [hydrated, setHydrated] = useState(
+    () => typeof window !== "undefined",
+  );
   const [oauthTimedOut, setOauthTimedOut] = useState(false);
-  const [supabaseAuth, setSupabaseAuth] = useState<SupabaseAuthState>({
-    status: "loading",
-  });
+  const [supabaseAuth, setSupabaseAuth] = useState<SupabaseAuthState>(() =>
+    readGuestIntentFromClient()
+      ? { status: "unauthenticated" }
+      : { status: "loading" },
+  );
 
   useEffect(() => {
-    setGuestMode(isGuestModeActive());
+    const active = readGuestIntentFromClient();
+    setGuestMode(active);
     setHydrated(true);
   }, []);
 
@@ -176,49 +202,69 @@ export function useWarriorAuth(): AuthState {
       };
     }
 
+    let cancelled = false;
     let unsubscribe: (() => void) | null = null;
+    const capId = window.setTimeout(() => {
+      if (!cancelled) {
+        setSupabaseAuth((prev) =>
+          prev.status === "loading" ? { status: "unauthenticated" } : prev,
+        );
+      }
+    }, SUPABASE_LOADING_CAP_MS);
 
     async function initSupabaseAuth() {
       const client = createWarriorBrowserClient();
       if (!client) {
-        setSupabaseAuth({ status: "unauthenticated" });
+        if (!cancelled) setSupabaseAuth({ status: "unauthenticated" });
         return;
       }
 
-      const { data } = await client.auth.getSession();
-      if (isGuestModeActive()) return;
+      try {
+        const { data } = await client.auth.getSession();
+        if (cancelled) return;
 
-      if (data.session?.user) {
-        setSupabaseAuth({
-          status: "authenticated",
-          user: data.session.user,
-          session: data.session,
-        });
-      } else {
-        setSupabaseAuth({ status: "unauthenticated" });
+        // Guest flag may appear mid-flight (share link). Never leave auth stuck on loading.
+        if (isGuestModeActive()) {
+          setGuestMode(true);
+          return;
+        }
+
+        if (data.session?.user) {
+          setSupabaseAuth({
+            status: "authenticated",
+            user: data.session.user,
+            session: data.session,
+          });
+        } else {
+          setSupabaseAuth({ status: "unauthenticated" });
+        }
+
+        const { data: listener } = client.auth.onAuthStateChange(
+          (_event, session) => {
+            if (isGuestModeActive()) return;
+            if (session?.user) {
+              setSupabaseAuth({
+                status: "authenticated",
+                user: session.user,
+                session,
+              });
+            } else {
+              setSupabaseAuth({ status: "unauthenticated" });
+            }
+          },
+        );
+
+        unsubscribe = () => listener.subscription.unsubscribe();
+      } catch {
+        if (!cancelled) setSupabaseAuth({ status: "unauthenticated" });
       }
-
-      const { data: listener } = client.auth.onAuthStateChange(
-        (_event, session) => {
-          if (isGuestModeActive()) return;
-          if (session?.user) {
-            setSupabaseAuth({
-              status: "authenticated",
-              user: session.user,
-              session,
-            });
-          } else {
-            setSupabaseAuth({ status: "unauthenticated" });
-          }
-        },
-      );
-
-      unsubscribe = () => listener.subscription.unsubscribe();
     }
 
     void initSupabaseAuth();
 
     return () => {
+      cancelled = true;
+      window.clearTimeout(capId);
       unsubscribe?.();
       window.removeEventListener("wp:guest-mode", onGuestOn);
       window.removeEventListener("wp:guest-mode-off", onGuestOff);
