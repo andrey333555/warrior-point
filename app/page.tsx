@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useSyncExternalStore } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   useWarriorAuth,
@@ -11,6 +11,24 @@ import { AuthGate } from "@/components/auth-gate";
 import { TacticalOS } from "@/components/tactical-os";
 import HomeHub from "@/components/home-hub";
 import { DEMO_FIGHTER_DB_ID } from "@/lib/warrior-constants";
+
+const GUEST_EVENTS = [
+  "wp:guest-mode",
+  "wp:guest-mode-off",
+  "wp:dev-bypass",
+  "wp:dev-bypass-off",
+  "storage",
+] as const;
+
+function subscribeGuestMode(onChange: () => void): () => void {
+  for (const name of GUEST_EVENTS) window.addEventListener(name, onChange);
+  return () => {
+    for (const name of GUEST_EVENTS) window.removeEventListener(name, onChange);
+  };
+}
+
+/** Сервер localStorage не видит — на первом кадре обе стороны дают false. */
+const guestModeOnServer = () => false;
 
 function hasGuestQuery(searchParams: URLSearchParams): boolean {
   return (
@@ -24,9 +42,17 @@ function HomeShell() {
   const auth = useWarriorAuth();
   const searchParams = useSearchParams();
   const tab = searchParams.get("tab");
-  const guestIntent =
-    hasGuestQuery(searchParams) ||
-    (typeof window !== "undefined" && isGuestModeActive());
+  // Гостя из localStorage читаем через useSyncExternalStore: React берёт
+  // серверный снимок на гидратацию и переключается на клиентский после неё.
+  // Иначе первый кадр расходится, React выбрасывает разметку и перерисовывает
+  // страницу целиком — на телефоне это выглядит как зависшая загрузка.
+  const storedGuest = useSyncExternalStore(
+    subscribeGuestMode,
+    isGuestModeActive,
+    guestModeOnServer,
+  );
+
+  const guestIntent = hasGuestQuery(searchParams) || storedGuest;
 
   // ?guest=1 / wp_guest_mode must never sit on «Загрузка…» or AuthGate.
   if (auth.status === "loading" && !guestIntent) {

@@ -41,6 +41,9 @@ function explain(message: string): { status: number; text: string } {
   if (/already used/i.test(message)) {
     return { status: 409, text: "Этот инвайт уже использован" };
   }
+  if (/limit reached/i.test(message)) {
+    return { status: 409, text: "Бонусы по этому коду закончились" };
+  }
   if (/already received/i.test(message)) {
     return { status: 409, text: "Приветственный бонус уже начислен" };
   }

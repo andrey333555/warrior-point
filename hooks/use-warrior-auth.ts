@@ -154,9 +154,9 @@ export function useWarriorAuth(): AuthState {
   const { data: oauthSession, status: oauthStatus } = useSession();
   // Client sync init: guest URL/localStorage must not wait on effects (infinite spinner).
   const [guestMode, setGuestMode] = useState(readGuestIntentFromClient);
-  const [hydrated, setHydrated] = useState(
-    () => typeof window !== "undefined",
-  );
+  // Стартуем с false и на сервере, и в браузере: разный первый кадр ломает
+  // гидратацию, а React в ответ перерисовывает всё дерево заново.
+  const [hydrated, setHydrated] = useState(false);
   const [oauthTimedOut, setOauthTimedOut] = useState(false);
   const [supabaseAuth, setSupabaseAuth] = useState<SupabaseAuthState>(() =>
     readGuestIntentFromClient()

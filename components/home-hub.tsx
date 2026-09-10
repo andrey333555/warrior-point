@@ -6,7 +6,6 @@ import InviteWelcome from "@/components/invite-welcome";
 import StoriesViewer from "@/components/stories-viewer";
 import { STORY_RINGS } from "@/lib/stories";
 import RegisterCTAPopup from "@/components/RegisterCTAPopup";
-import SocialProofBanner from "@/components/SocialProofBanner";
 import TopFightersShowcase from "@/components/TopFightersShowcase";
 import { useWarriorAuth } from "@/hooks/use-warrior-auth";
 
@@ -178,8 +177,6 @@ export default function HomeHub() {
             </button>
           </div>
         </div>
-
-        <SocialProofBanner />
 
         <div className="relative px-4 pb-4">
           <button
