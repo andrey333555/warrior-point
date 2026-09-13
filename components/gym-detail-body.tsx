@@ -113,6 +113,16 @@ export function GymDetailBody({
         onTrain={scrollToSchedule}
       />
 
+      {gym.instagram || gym.phone ? (
+        <p className="mt-3 px-1 text-xs text-neutral-400">
+          {gym.instagram ? (
+            <span className="text-[#C9A84C]">{gym.instagram}</span>
+          ) : null}
+          {gym.instagram && gym.phone ? " · " : null}
+          {gym.phone ?? null}
+        </p>
+      ) : null}
+
       <GymTrainers gymName={hero.name} />
 
       {gym.featuredAthletes && gym.featuredAthletes.length > 0 ? (
@@ -129,17 +139,36 @@ export function GymDetailBody({
         onBook={(id) => void handleBook(id)}
       />
 
-      <section className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
-        <p className="font-[family-name:var(--font-jetbrains-mono)] text-[9px] font-semibold uppercase tracking-[0.18em] text-neutral-500">
-          Расписание клуба · каркас
-        </p>
-        <p className="mt-1.5 text-xs leading-relaxed text-neutral-400">
-          Полный календарь зала (повторяющиеся слоты, ресурсы) — в backlog.
-          Сейчас доступны сплиты выше; запись уважает{" "}
-          <span className="text-[#C9A84C]">booking_enabled</span> бойца на
-          публичной карточке.
-        </p>
-      </section>
+      {gym.schedule && gym.schedule.length > 0 ? (
+        <section className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+          <p className="font-[family-name:var(--font-jetbrains-mono)] text-[9px] font-semibold uppercase tracking-[0.18em] text-neutral-500">
+            Расписание клуба
+          </p>
+          <ul className="mt-2 space-y-2">
+            {gym.schedule.map((slot) => (
+              <li key={slot.discipline} className="text-xs leading-relaxed text-neutral-300">
+                <span className="font-semibold text-white">{slot.discipline}</span>
+                <span className="text-neutral-400"> · {slot.times}</span>
+                {slot.phone ? (
+                  <span className="mt-0.5 block text-neutral-500">{slot.phone}</span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : (
+        <section className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+          <p className="font-[family-name:var(--font-jetbrains-mono)] text-[9px] font-semibold uppercase tracking-[0.18em] text-neutral-500">
+            Расписание клуба · каркас
+          </p>
+          <p className="mt-1.5 text-xs leading-relaxed text-neutral-400">
+            Полный календарь зала (повторяющиеся слоты, ресурсы) — в backlog.
+            Сейчас доступны сплиты выше; запись уважает{" "}
+            <span className="text-[#C9A84C]">booking_enabled</span> бойца на
+            публичной карточке.
+          </p>
+        </section>
+      )}
 
       <GymMap gym={gym} hexColor={hexColor} />
 
