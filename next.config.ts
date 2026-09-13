@@ -53,7 +53,10 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  // Next 16.3 + Vercel adapter: standalone больше не пишет
+  // .next/next-server.js.nft.json, а Vercel onBuildComplete его открывает → ENOENT.
+  // На Vercel standalone и так игнорируется. Для Docker / self-host оставляем.
+  output: process.env.VERCEL ? undefined : "standalone",
   turbopack: {
     root: projectRoot,
   },
