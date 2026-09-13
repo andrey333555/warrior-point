@@ -176,21 +176,23 @@ export default function FighterPublicPage({ profile, viewerRole }: Props) {
       )}
 
       {view.showDonations ? (
-        <button
-          type="button"
-          onClick={() => setDonateOpen(true)}
-          className="mb-4 w-full rounded-2xl border border-[#C9A84C]/40 bg-[#C9A84C]/10 px-4 py-4 text-left"
-        >
-          <p className="text-base font-bold text-[#C9A84C]">Поддержать бойца</p>
+        <div className="mb-4">
+          <button
+            type="button"
+            onClick={() => setDonateOpen(true)}
+            className="w-full rounded-2xl border border-[#C9A84C]/40 bg-[#C9A84C]/10 px-4 py-4 text-left"
+          >
+            <p className="text-base font-bold text-[#C9A84C]">Поддержать бойца</p>
+            <p className="mt-0.5 text-xs text-white/45">
+              Донат доступен всегда · собрано {raisedRub.toLocaleString("ru-RU")} ₽
+            </p>
+          </button>
           {profile.donationGoal ? (
-            <p className="mt-1 text-sm font-medium text-white/85">
+            <p className="mt-2 px-1 text-sm font-medium text-white/85">
               {profile.donationGoal}
             </p>
           ) : null}
-          <p className="mt-0.5 text-xs text-white/45">
-            Донат доступен всегда · собрано {raisedRub.toLocaleString("ru-RU")} ₽
-          </p>
-        </button>
+        </div>
       ) : null}
 
       <DonateModal

@@ -139,6 +139,8 @@ const PROFILE_SELECT_BASE = [
   "hide_bio",
   "hide_record",
   "verification_status",
+  "nickname",
+  "donation_goal",
 ] as const;
 
 function applyKnownCardDefaults(
@@ -330,10 +332,11 @@ export async function fetchFighterBySlug(
   const extras = await fetchCardExtras(client, normalized);
 
   if (!error && data && typeof data === "object") {
+    const row = data as Record<string, unknown>;
     const mapped = mapRow({
-      ...(data as Record<string, unknown>),
-      nickname: extras.nickname,
-      donation_goal: extras.donationGoal,
+      ...row,
+      nickname: extras.nickname ?? row.nickname,
+      donation_goal: extras.donationGoal ?? row.donation_goal,
     });
     if (mapped) {
       if (normalized === "romanov" || mapped.id === "WP-COACH-001") {
