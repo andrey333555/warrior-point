@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, JetBrains_Mono } from "next/font/google";
+import { headers } from "next/headers";
 import Script from "next/script";
 import { AppChrome } from "@/components/app-chrome";
 import { TelegramTheme } from "@/components/telegram-theme";
@@ -54,11 +55,13 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+
   return (
     <html
       lang="ru"
@@ -72,6 +75,7 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
         {/* Apply saved theme before paint to avoid flash */}
         <script
+          nonce={nonce}
           dangerouslySetInnerHTML={{
             __html: THEME_BOOTSTRAP_SCRIPT,
           }}
@@ -88,6 +92,7 @@ export default function RootLayout({
         <Script
           src="https://telegram.org/js/telegram-web-app.js"
           strategy="afterInteractive"
+          nonce={nonce}
         />
 
         {/* Reads Telegram theme and sets --tg-* CSS vars on :root */}
