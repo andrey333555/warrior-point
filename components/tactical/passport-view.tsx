@@ -43,7 +43,6 @@ import ShareablePoster, {
   type ShareablePosterData,
 } from "@/components/ShareablePoster";
 import { LeagueBadge } from "@/components/LeagueIcons";
-import FighterSocialProof from "@/components/FighterSocialProof";
 import FighterMediaGallery from "@/components/FighterMediaGallery";
 import FighterSponsors from "@/components/FighterSponsors";
 import FundraisingProgress from "@/components/FundraisingProgress";
@@ -386,9 +385,6 @@ function PassportTop({
   isWinner,
   role,
   portraitSrc,
-  fans,
-  totalRaised,
-  views,
 }: {
   name: string;
   nickname?: string;
@@ -399,9 +395,6 @@ function PassportTop({
   isWinner: boolean;
   role: RoleMode;
   portraitSrc?: string;
-  fans: number;
-  totalRaised: number;
-  views: number;
 }) {
   const displayName = nickname?.toUpperCase() ?? name.toUpperCase();
   const status =
@@ -471,7 +464,6 @@ function PassportTop({
           ))}
         </div>
       ) : null}
-      <FighterSocialProof fans={fans} totalRaised={totalRaised} views={views} />
     </div>
   );
 }
@@ -956,9 +948,6 @@ export function PassportView({
           isWinner={stats.isWinner}
           role={role}
           portraitSrc={stats.portraitSrc}
-          fans={1_284}
-          totalRaised={fundraiser.raisedRub}
-          views={18_420}
         />
       </motion.div>
 
