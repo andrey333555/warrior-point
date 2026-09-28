@@ -86,7 +86,7 @@ Next.js 16 (App Router, Turbopack), TypeScript, Tailwind, Supabase, Vercel, ЮKa
 **Платежи** (`lib/payments/`): `create-intent.ts` создаёт `PaymentIntent`, `yookassa.ts` — клиент ЮKassa (`isYooKassaConfigured()` — фичефлаг по наличию ключей), `settle.ts`/`apply-rewards*.ts` — начисление после оплаты, `wallet-server.ts` — баланс. Роуты: `app/api/payment/{create,confirm,webhook,mock-pay}`. `mock-pay` — демо-оплата без реальных ключей ЮKassa.
 
 **Экономика/уровни** (ядро из раздела «не трогать без спроса»):
-- `lib/economy.ts` — `splitSettlement`/`calculateTotalTariff` (комиссия 19%), `donateSettlement` (донаты). **Внимание:** `DONATION_PLATFORM_FEE_PCT` в коде = 5%, а в разделе «Экономика» выше указано 10% — расхождение между кодом и документом, стоит сверить с владельцем, какое значение верное
+- `lib/economy.ts` — `splitSettlement`/`calculateTotalTariff` (комиссия за тренировки 19%, `PLATFORM_COMMISSION_PCT`), `donateSettlement` (донаты 10%, `DONATION_PLATFORM_FEE_PCT`). Обе ставки сверены с владельцем и совпадают с кодом
 - `lib/levels.ts` — 23 раунда по Фибоначчи (`ROUNDS`), тиры (Новичок/Боец/Ветеран/Элита/Легенда), хелперы прогресса XP
 
 **Check-in** (`lib/checkin-server.ts`): HMAC-подписанные QR/тренерские коды на `CHECKIN_SECRET` (фоллбэк — `NEXTAUTH_SECRET`), ротация по слотам времени (`lib/verify.ts`, `CODE_ROTATION_MS`). Роуты: `app/api/checkin/{code,qr,verify}`.

@@ -14,7 +14,7 @@ export { MAX_LEVEL, MIN_LEVEL } from "@/lib/levels";
 export const PLATFORM_COMMISSION_PCT = 19 as const;
 
 /** Donation tip commission (% of gross SBP transfer). */
-export const DONATION_PLATFORM_FEE_PCT = 5 as const;
+export const DONATION_PLATFORM_FEE_PCT = 10 as const;
 
 export function donateSettlement(gross: number) {
   const safe = Math.max(0, Math.round(gross));

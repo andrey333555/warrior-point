@@ -220,7 +220,7 @@ export async function fetchDonationFeed(
 
 /**
  * Transfer a direct donation: debit donor balance, credit fighter balance (net),
- * persist comment in `donations` with 5% platform fee.
+ * persist comment in `donations` with 10% platform fee.
  */
 export async function handleDonate(
   client: SupabaseClient,
