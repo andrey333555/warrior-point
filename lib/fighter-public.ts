@@ -268,141 +268,64 @@ export function redactFighterForAnonymous(
   };
 }
 
-async function fetchCardExtras(
-  client: SupabaseClient,
-  slug: string,
-): Promise<{ nickname: string | null; donationGoal: string | null }> {
-  const extras = { nickname: null as string | null, donationGoal: null as string | null };
-  const { data, error } = await client
-    .from("profiles")
-    .select("nickname, donation_goal")
-    .eq("slug", slug)
-    .maybeSingle();
-
-  if (!error && data && typeof data === "object") {
-    extras.nickname = parseNickname(
-      (data as { nickname?: unknown }).nickname,
-    );
-    extras.donationGoal = parseDonationGoal(
-      (data as { donation_goal?: unknown }).donation_goal,
-    );
-    return extras;
-  }
-
-  const nick = await client
-    .from("profiles")
-    .select("nickname")
-    .eq("slug", slug)
-    .maybeSingle();
-  if (!nick.error && nick.data) {
-    extras.nickname = parseNickname(
-      (nick.data as { nickname?: unknown }).nickname,
-    );
-  }
-
-  const goal = await client
-    .from("profiles")
-    .select("donation_goal")
-    .eq("slug", slug)
-    .maybeSingle();
-  if (!goal.error && goal.data) {
-    extras.donationGoal = parseDonationGoal(
-      (goal.data as { donation_goal?: unknown }).donation_goal,
-    );
-  }
-
-  return extras;
-}
-
+/**
+ * Fetch a fighter's public card by slug.
+ *
+ * Reads through `public.profiles_public` — a view that never exposes
+ * balance/coach_earnings/iphone_tickets/coach_id and masks
+ * bio/record/club/weight_class per the same visibility/hide_* rules
+ * `redactFighterForAnonymous` applies (see migration
+ * 0031_profiles_public_card_fields.sql). Never queries the base `profiles`
+ * table directly — anon has zero grants on it since the RLS lockdown.
+ *
+ * On a genuine read failure (`error` truthy — permission/network/etc, not
+ * "no such slug") this THROWS instead of silently returning demo data for
+ * an unrelated fighter. Callers must handle that distinctly from a null
+ * return (= no profile with this slug, a real 404).
+ */
 export async function fetchFighterBySlug(
   client: SupabaseClient,
   slug: string,
 ): Promise<FighterPublicProfile | null> {
-  const normalizedRaw = slug.trim().toLowerCase();
-  const normalized = normalizedRaw;
+  const normalized = slug.trim().toLowerCase();
   if (!normalized) return null;
 
-  const query = await client
-    .from("profiles")
+  const { data, error } = await client
+    .from("profiles_public")
     .select(PROFILE_SELECT_BASE.join(", "))
     .eq("slug", normalized)
     .maybeSingle();
 
-  const { data, error } = query;
-  const extras = await fetchCardExtras(client, normalized);
+  if (error) {
+    throw new Error(`fetchFighterBySlug(${normalized}): ${error.message}`);
+  }
+  if (!data || typeof data !== "object") return null;
 
-  if (!error && data && typeof data === "object") {
-    const row = data as Record<string, unknown>;
-    const mapped = mapRow({
-      ...row,
-      nickname: extras.nickname ?? row.nickname,
-      donation_goal: extras.donationGoal ?? row.donation_goal,
-    });
-    if (mapped) {
-      if (normalized === "romanov" || mapped.id === "WP-COACH-001") {
-        const demo = getDemoFighterBySlug("romanov")!;
-        return applyKnownCardDefaults({
-          ...mapped,
-          slug: mapped.slug || "romanov",
-          donationGoal: mapped.donationGoal ?? extras.donationGoal ?? demo.donationGoal,
-          nickname: mapped.nickname ?? extras.nickname ?? demo.nickname,
-          displayName:
-            mapped.displayName === "Боец" || !mapped.displayName.trim()
-              ? demo.displayName
-              : mapped.displayName,
-          avatarUrl: mapped.avatarUrl ?? demo.avatarUrl,
-          club: mapped.club ?? demo.club,
-          bio: mapped.bio ?? demo.bio,
-        });
-      }
-      // Fill empty public card fields from showcase demo.
-      if (normalized === "king" || mapped.id === DEMO_FIGHTER_DB_ID) {
-        const demo = getDemoFighterBySlug("king")!;
-        return {
-          ...mapped,
-          slug: mapped.slug || "king",
-          bio: mapped.bio ?? demo.bio,
-          record: mapped.record ?? demo.record,
-          avatarUrl: mapped.avatarUrl ?? demo.avatarUrl,
-          club: mapped.club ?? demo.club,
-          weightClass: mapped.weightClass ?? demo.weightClass,
-          displayName:
-            mapped.displayName === "Боец" || !mapped.displayName.trim()
-              ? demo.displayName
-              : mapped.displayName,
-        };
-      }
-      return applyKnownCardDefaults(mapped);
-    }
+  const mapped = mapRow(data as Record<string, unknown>);
+  if (!mapped) return null;
+
+  // King is the marketing showcase profile — curated demo defaults fill any
+  // gap intentionally, visitors know it's a demo. Not applied to any other
+  // fighter: a real profile's missing field should just be missing, not
+  // quietly replaced by someone else's data.
+  if (normalized === "king" || mapped.id === DEMO_FIGHTER_DB_ID) {
+    const demo = getDemoFighterBySlug("king")!;
+    return {
+      ...mapped,
+      slug: mapped.slug || "king",
+      bio: mapped.bio ?? demo.bio,
+      record: mapped.record ?? demo.record,
+      avatarUrl: mapped.avatarUrl ?? demo.avatarUrl,
+      club: mapped.club ?? demo.club,
+      weightClass: mapped.weightClass ?? demo.weightClass,
+      displayName:
+        mapped.displayName === "Боец" || !mapped.displayName.trim()
+          ? demo.displayName
+          : mapped.displayName,
+    };
   }
 
-  // Fallback: slug column missing — resolve demo fighter by id
-  if (normalized === "king") {
-    const { data: byId } = await client
-      .from("profiles")
-      .select("id, display_name, role, bio, club, weight_class")
-      .eq("id", DEMO_FIGHTER_DB_ID)
-      .maybeSingle();
-
-    if (byId) {
-      const base = getDemoFighterBySlug("king")!;
-      const rawName =
-        typeof byId.display_name === "string" ? byId.display_name : "";
-      return {
-        ...base,
-        displayName: rawName.trim() ? rawName : base.displayName,
-        bio: typeof byId.bio === "string" ? byId.bio : base.bio,
-        club: typeof byId.club === "string" ? byId.club : base.club,
-        weightClass:
-          typeof byId.weight_class === "string"
-            ? byId.weight_class
-            : base.weightClass,
-      };
-    }
-  }
-
-  const fallback = getDemoFighterBySlug(normalized);
-  return fallback ? applyKnownCardDefaults(fallback) : null;
+  return applyKnownCardDefaults(mapped);
 }
 
 export type PrivacyPatch = {

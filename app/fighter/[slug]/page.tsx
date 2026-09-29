@@ -11,15 +11,29 @@ export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ slug: string }> };
 
+/**
+ * `null` = client not configured at all (legitimate demo mode).
+ * `{ profile: null }` = no fighter with this slug (real 404).
+ * throws = the read itself failed (permission/network/etc) — the caller
+ * must show a distinct error, never silently fall back to someone else's
+ * demo card.
+ */
 async function loadProfile(slug: string) {
   const client = createWarriorBrowserClient();
-  if (!client) return getDemoFighterBySlug(slug);
-  return fetchFighterBySlug(client, slug);
+  if (!client) return { profile: getDemoFighterBySlug(slug) };
+  const profile = await fetchFighterBySlug(client, slug);
+  return { profile };
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const profile = (await loadProfile(slug)) ?? getDemoFighterBySlug(slug);
+  let profile: Awaited<ReturnType<typeof loadProfile>>["profile"] = null;
+  try {
+    profile = (await loadProfile(slug)).profile;
+  } catch {
+    // Metadata falls back to a generic title — the page body surfaces the
+    // real error.
+  }
   const safe = profile ? redactFighterForAnonymous(profile) : null;
   return {
     title: safe
@@ -34,7 +48,27 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function FighterSlugPage({ params }: Props) {
   const { slug } = await params;
-  const profile = await loadProfile(slug);
+
+  let profile: Awaited<ReturnType<typeof loadProfile>>["profile"];
+  try {
+    profile = (await loadProfile(slug)).profile;
+  } catch (err) {
+    console.error(`[fighter/${slug}] read failed:`, err);
+    return (
+      <div
+        className="flex min-h-screen flex-col items-center justify-center gap-3 px-6 text-center"
+        style={{ background: "#0A0A0A", color: "#fff" }}
+      >
+        <p className="text-lg font-semibold">Не удалось загрузить карточку</p>
+        <p className="text-sm text-white/45">
+          Попробуйте обновить страницу через минуту
+        </p>
+        <a href="/" className="mt-2 text-sm text-[#C9A84C]">
+          На главную
+        </a>
+      </div>
+    );
+  }
 
   if (!profile) {
     return (

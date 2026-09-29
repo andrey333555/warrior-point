@@ -9,7 +9,7 @@
  * All Supabase connection interfaces are preserved:
  *   - createWarriorBrowserClient()  (memoised browser client)
  *   - fetchFighterHydration()       (live XP ledger)
- *   - fetchWarriorProfile()         (display name / role)
+ *   - fetchOwnProfileMe()           (display name / role, session-bound server route)
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -18,7 +18,8 @@ import { useOfflineSync } from "@/hooks/use-offline-sync";
 import { AnimatePresence, motion } from "framer-motion";
 import { useWarriorAuth } from "@/hooks/use-warrior-auth";
 import { createWarriorBrowserClient } from "@/lib/supabase/client";
-import { fetchFighterHydration, fetchWarriorProfile } from "@/lib/supabase/read";
+import { fetchFighterHydration } from "@/lib/supabase/read";
+import { fetchOwnProfileMe } from "@/lib/profile-me-api";
 import {
   deriveLevel,
   xpBracketProgress,
@@ -125,7 +126,7 @@ export function TacticalOS({ fighterId }: { fighterId: string }) {
       try {
         const [ledger, profile] = await Promise.all([
           fetchFighterHydration(client, fighterId),
-          fetchWarriorProfile(client, fighterId),
+          fetchOwnProfileMe(fighterId),
         ]);
         if (aborted) return;
         setTotalXp(ledger.totalXp);

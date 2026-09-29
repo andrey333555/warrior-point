@@ -37,12 +37,13 @@ export async function GET(req: Request) {
       mock: true,
       role: "fighter",
       balance: 0,
+      displayName: null,
     });
   }
 
   const { data, error } = await sb
     .from("profiles")
-    .select("role, balance")
+    .select("role, balance, display_name")
     .eq("id", bound.userId)
     .maybeSingle();
 
@@ -57,5 +58,9 @@ export async function GET(req: Request) {
     ok: true,
     role: resolveWarriorRole(data?.role),
     balance: Number(data?.balance) || 0,
+    displayName:
+      typeof data?.display_name === "string" && data.display_name.trim()
+        ? data.display_name
+        : null,
   });
 }
