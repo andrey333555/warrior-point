@@ -17,39 +17,25 @@ import {
   type SkillTier,
   type WarriorCalibration,
 } from "@/lib/calibration";
-import { saveCalibration, getCalibration } from "@/lib/calibration-store";
+import { saveCalibration } from "@/lib/calibration-store";
 
 /**
- * Provision profiles/fighter_stats through the server route
- * (`/api/auth/provision`) — the server verifies the Supabase access token
- * itself and reads the user id out of that, never out of a client claim.
- * Replaces the old direct anon-key `provisionNewWarrior()` call.
+ * Provisioning itself is NOT called from here any more — both
+ * `signInWithPassword` and `signUp` (with an immediate session) fire a
+ * Supabase SIGNED_IN event on the same client singleton that
+ * `hooks/use-warrior-auth.ts` listens to, and that's now the single place
+ * that calls `/api/auth/provision`. Calling it here too would just be a
+ * redundant duplicate request (the route is idempotent, but no reason to
+ * double the network calls).
  */
-async function provisionViaApi(
-  accessToken: string,
-  displayName: string,
-  calibration?: WarriorCalibration,
-): Promise<void> {
-  try {
-    await fetch("/api/auth/provision", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        accessToken,
-        displayName,
-        calibration: calibration
-          ? {
-              skillTier: calibration.skillTier,
-              record: calibration.record,
-              startingElo: calibration.startingElo,
-              verified: calibration.verifiedFighter,
-            }
-          : undefined,
-      }),
-    });
-  } catch (err) {
-    console.warn("[AuthForm] provision request failed:", err);
-  }
+
+function calibrationToMetadata(calibration: WarriorCalibration) {
+  return {
+    skillTier: calibration.skillTier,
+    record: calibration.record,
+    startingElo: calibration.startingElo,
+    verified: calibration.verifiedFighter,
+  };
 }
 
 type CalibrationPreview = WarriorCalibration & { priceHint: string };
@@ -113,20 +99,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (mode === "login") {
-      const { data, error } = await client.auth.signInWithPassword({ email, password });
+      const { error } = await client.auth.signInWithPassword({ email, password });
       if (error) {
         setEcho({ tone: "err", text: "Неверный email или пароль" });
-      } else if (data.session?.access_token && data.user) {
-        // Idempotent safety net: ensures the profile row exists even if it
-        // wasn't created at sign-up time (e.g. email confirmation was
-        // pending back then). Cheap no-op otherwise.
-        const savedCalibration = getCalibration(data.user.id) ?? undefined;
-        void provisionViaApi(
-          data.session.access_token,
-          fullName || email.split("@")[0],
-          savedCalibration,
-        );
       }
+      // On success, the SIGNED_IN listener in useWarriorAuth() provisions
+      // (idempotent — no-op if the profile already exists).
     } else {
       const record = parseRecordInput(recordInput);
       if (!record) {
@@ -140,32 +118,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data, error } = await client.auth.signUp({
         email,
         password,
-        options: { data: { full_name: fullName } },
+        options: {
+          data: {
+            full_name: fullName,
+            // Durable, not device-bound — the provision route reads this
+            // back after verifying the token, works even if confirmation
+            // happens on a different device than sign-up.
+            calibration: calibrationToMetadata(calibration),
+          },
+        },
       });
       if (error) {
         setEcho({ tone: "err", text: error.message });
       } else {
         if (data.user) {
+          // Fallback only, for pre-existing accounts whose user_metadata
+          // doesn't have calibration yet.
           saveCalibration(data.user.id, calibration);
         }
-        if (!data.session) {
-          setEcho({
-            tone: "ok",
-            text: `Проверь email · ELO ${calibration.startingElo} · ✅ подтверждённый боец`,
-          });
-        } else {
-          if (data.session.access_token) {
-            await provisionViaApi(
-              data.session.access_token,
-              fullName || email.split("@")[0],
-              calibration,
-            );
-          }
-          setEcho({
-            tone: "ok",
-            text: `Профиль создан · ELO ${calibration.startingElo}`,
-          });
-        }
+        // SIGNED_IN listener provisions if a session was issued immediately;
+        // otherwise it'll happen on first login after email confirmation.
+        setEcho(
+          !data.session
+            ? {
+                tone: "ok",
+                text: `Проверь email · ELO ${calibration.startingElo} · ✅ подтверждённый боец`,
+              }
+            : {
+                tone: "ok",
+                text: `Профиль создан · ELO ${calibration.startingElo}`,
+              },
+        );
       }
     }
 

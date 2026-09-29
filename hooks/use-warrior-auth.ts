@@ -6,6 +6,8 @@ import { useSession, signOut as nextAuthSignOut } from "next-auth/react";
 import type { Session as NextAuthSession } from "next-auth";
 import { createWarriorBrowserClient } from "@/lib/supabase/client";
 import { DEMO_FIGHTER_DB_ID } from "@/lib/warrior-constants";
+import { provisionOwnProfile } from "@/lib/profile-provision-api";
+import { getCalibration } from "@/lib/calibration-store";
 
 export type AuthState =
   | { status: "loading" }
@@ -199,7 +201,7 @@ export function useWarriorAuth(): AuthState {
       }
 
       const { data: listener } = client.auth.onAuthStateChange(
-        (_event, session) => {
+        (event, session) => {
           if (isGuestModeActive()) return;
           if (session?.user) {
             setSupabaseAuth({
@@ -207,6 +209,17 @@ export function useWarriorAuth(): AuthState {
               user: session.user,
               session,
             });
+            // Covers every real sign-in, not just the login form — including
+            // the email-confirmation link redirect, which establishes a
+            // session directly (detectSessionInUrl) without ever going
+            // through AuthProvider.submit(). Idempotent on the server: an
+            // existing profile is never overwritten.
+            if (event === "SIGNED_IN" && session.access_token) {
+              void provisionOwnProfile(
+                session.access_token,
+                getCalibration(session.user.id) ?? undefined,
+              );
+            }
           } else {
             setSupabaseAuth({ status: "unauthenticated" });
           }
