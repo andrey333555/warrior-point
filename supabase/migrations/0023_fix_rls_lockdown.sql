@@ -1,4 +1,5 @@
 -- Warrior Point · Migration 0023 — Fix RLS lockdown (supersedes broken 0020)
+--                                  + fold in prod's grant_donation_xp hotfix
 -- Run in: Supabase Dashboard → SQL Editor → New query → Run
 -- Idempotent: safe to re-run.
 --
@@ -173,5 +174,171 @@ END $$;
 -- fights / gyms / sessions: not referenced anywhere in app code — swept
 -- above, no policy re-created here → RLS enabled + zero policies = fully
 -- closed to anon and authenticated. Service role is unaffected either way.
+
+NOTIFY pgrst, 'reload schema';
+
+-- ── 4. Day-2 hotfix folded in: grant_donation_xp() ambiguous fighter_id ────
+--
+-- Prod carries a hand-patched version of this function (applied directly
+-- via SQL Editor on Day 2, never committed) that renames the RETURNS TABLE
+-- column `fighter_id` → `out_fighter_id` to fix "column reference
+-- fighter_id is ambiguous". 0021_donation_xp.sql in this repo still has the
+-- original `fighter_id` column name — re-running it as-is on prod fails
+-- with "cannot change return type of existing function
+-- grant_donation_xp(uuid)", which also aborts everything after it in the
+-- same paste (see supabase/prod-catchup.sql, which additionally DROPs this
+-- function — and wp_derive_level / wp_donation_xp_from_gross_rub, same file,
+-- same risk class — right before 0021's own CREATE, so that statement
+-- doesn't abort the script before ever reaching this corrected version).
+--
+-- Nothing in the JS caller (lib/supabase/donations.ts grantDonationXpOnce)
+-- reads the RPC result's columns by name — it only checks `error` — so this
+-- rename is safe app-side. Body is otherwise identical to 0021's.
+
+DROP FUNCTION IF EXISTS public.grant_donation_xp(UUID);
+
+CREATE OR REPLACE FUNCTION public.grant_donation_xp(p_donation_id UUID)
+RETURNS TABLE (
+  ok              BOOLEAN,
+  already_granted BOOLEAN,
+  xp_awarded      INTEGER,
+  out_fighter_id  TEXT,
+  total_xp_after  BIGINT,
+  level_after     INTEGER,
+  message         TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_fighter_id     TEXT;
+  v_gross_rub      BIGINT;
+  v_xp             INTEGER;
+  v_rows           INTEGER;
+  v_total_before   BIGINT;
+  v_monthly_before BIGINT;
+  v_total_after    BIGINT;
+  v_monthly_after  BIGINT;
+  v_level_after    INTEGER;
+BEGIN
+  SELECT
+    COALESCE(d.fighter_id, d.recipient_id),
+    COALESCE(
+      d.gross_amount,
+      CASE
+        WHEN d.amount IS NOT NULL THEN FLOOR(d.amount / 100.0)::BIGINT
+        ELSE NULL
+      END
+    )
+  INTO v_fighter_id, v_gross_rub
+  FROM public.donations d
+  WHERE d.id = p_donation_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN QUERY SELECT
+      false, false, 0, NULL::TEXT, NULL::BIGINT, NULL::INTEGER,
+      'donation not found'::TEXT;
+    RETURN;
+  END IF;
+
+  IF v_fighter_id IS NULL OR v_gross_rub IS NULL OR v_gross_rub <= 0 THEN
+    RETURN QUERY SELECT
+      false, false, 0, v_fighter_id, NULL::BIGINT, NULL::INTEGER,
+      'donation missing fighter_id or gross'::TEXT;
+    RETURN;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.donations d
+    WHERE d.id = p_donation_id AND d.status = 'paid'
+  ) THEN
+    RETURN QUERY SELECT
+      false, false, 0, v_fighter_id, NULL::BIGINT, NULL::INTEGER,
+      'donation not paid — XP deferred until status=paid'::TEXT;
+    RETURN;
+  END IF;
+
+  v_xp := public.wp_donation_xp_from_gross_rub(v_gross_rub);
+
+  UPDATE public.donations d
+  SET
+    xp_granted = true,
+    xp_awarded = v_xp
+  WHERE d.id = p_donation_id
+    AND d.xp_granted = false
+    AND d.status = 'paid';
+
+  GET DIAGNOSTICS v_rows = ROW_COUNT;
+
+  IF v_rows = 0 THEN
+    RETURN QUERY
+    SELECT
+      true,
+      true,
+      d.xp_awarded,
+      COALESCE(d.fighter_id, d.recipient_id),
+      NULL::BIGINT,
+      NULL::INTEGER,
+      'already granted'::TEXT
+    FROM public.donations d
+    WHERE d.id = p_donation_id;
+    RETURN;
+  END IF;
+
+  SELECT
+    COALESCE(fs.total_xp, 0),
+    COALESCE(fs.monthly_xp, 0)
+  INTO v_total_before, v_monthly_before
+  FROM public.fighter_stats fs
+  WHERE fs.fighter_id = v_fighter_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    v_total_before := 0;
+    v_monthly_before := 0;
+  END IF;
+
+  v_total_after   := v_total_before + v_xp;
+  v_monthly_after := v_monthly_before + v_xp;
+  v_level_after   := public.wp_derive_level(v_total_after);
+
+  INSERT INTO public.fighter_stats AS fs (
+    fighter_id,
+    total_xp,
+    current_level,
+    monthly_xp,
+    updated_at
+  )
+  VALUES (
+    v_fighter_id,
+    v_total_after,
+    v_level_after,
+    v_monthly_after,
+    NOW()
+  )
+  ON CONFLICT (fighter_id) DO UPDATE
+  SET
+    total_xp      = EXCLUDED.total_xp,
+    current_level = EXCLUDED.current_level,
+    monthly_xp    = EXCLUDED.monthly_xp,
+    updated_at    = EXCLUDED.updated_at;
+
+  RETURN QUERY SELECT
+    true,
+    false,
+    v_xp,
+    v_fighter_id,
+    v_total_after,
+    v_level_after,
+    'granted'::TEXT;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.grant_donation_xp(UUID) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.grant_donation_xp(UUID) FROM anon;
+REVOKE ALL ON FUNCTION public.grant_donation_xp(UUID) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.grant_donation_xp(UUID) TO service_role;
 
 NOTIFY pgrst, 'reload schema';
