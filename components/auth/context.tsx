@@ -9,7 +9,6 @@ import {
   type ReactNode,
 } from "react";
 import { createWarriorBrowserClient } from "@/lib/supabase/client";
-import { provisionNewWarrior } from "@/lib/supabase/provision-user";
 import type { AuthEcho, AuthMode } from "@/components/auth/types";
 import {
   buildCalibration,
@@ -18,7 +17,40 @@ import {
   type SkillTier,
   type WarriorCalibration,
 } from "@/lib/calibration";
-import { saveCalibration } from "@/lib/calibration-store";
+import { saveCalibration, getCalibration } from "@/lib/calibration-store";
+
+/**
+ * Provision profiles/fighter_stats through the server route
+ * (`/api/auth/provision`) — the server verifies the Supabase access token
+ * itself and reads the user id out of that, never out of a client claim.
+ * Replaces the old direct anon-key `provisionNewWarrior()` call.
+ */
+async function provisionViaApi(
+  accessToken: string,
+  displayName: string,
+  calibration?: WarriorCalibration,
+): Promise<void> {
+  try {
+    await fetch("/api/auth/provision", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        accessToken,
+        displayName,
+        calibration: calibration
+          ? {
+              skillTier: calibration.skillTier,
+              record: calibration.record,
+              startingElo: calibration.startingElo,
+              verified: calibration.verifiedFighter,
+            }
+          : undefined,
+      }),
+    });
+  } catch (err) {
+    console.warn("[AuthForm] provision request failed:", err);
+  }
+}
 
 type CalibrationPreview = WarriorCalibration & { priceHint: string };
 
@@ -81,8 +113,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (mode === "login") {
-      const { error } = await client.auth.signInWithPassword({ email, password });
-      if (error) setEcho({ tone: "err", text: "Неверный email или пароль" });
+      const { data, error } = await client.auth.signInWithPassword({ email, password });
+      if (error) {
+        setEcho({ tone: "err", text: "Неверный email или пароль" });
+      } else if (data.session?.access_token && data.user) {
+        // Idempotent safety net: ensures the profile row exists even if it
+        // wasn't created at sign-up time (e.g. email confirmation was
+        // pending back then). Cheap no-op otherwise.
+        const savedCalibration = getCalibration(data.user.id) ?? undefined;
+        void provisionViaApi(
+          data.session.access_token,
+          fullName || email.split("@")[0],
+          savedCalibration,
+        );
+      }
     } else {
       const record = parseRecordInput(recordInput);
       if (!record) {
@@ -103,20 +147,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         if (data.user) {
           saveCalibration(data.user.id, calibration);
-          const { error: provErr } = await provisionNewWarrior(
-            client,
-            data.user.id,
-            fullName || email.split("@")[0],
-            {
-              skillTier: calibration.skillTier,
-              record: calibration.record,
-              startingElo: calibration.startingElo,
-              verified: calibration.verifiedFighter,
-            },
-          );
-          if (provErr) {
-            console.warn("[AuthForm] provision warning:", provErr.message);
-          }
         }
         if (!data.session) {
           setEcho({
@@ -124,6 +154,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             text: `Проверь email · ELO ${calibration.startingElo} · ✅ подтверждённый боец`,
           });
         } else {
+          if (data.session.access_token) {
+            await provisionViaApi(
+              data.session.access_token,
+              fullName || email.split("@")[0],
+              calibration,
+            );
+          }
           setEcho({
             tone: "ok",
             text: `Профиль создан · ELO ${calibration.startingElo}`,

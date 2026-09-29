@@ -24,6 +24,7 @@ import {
 import { findOrg } from "@/data/organisations";
 import { createWarriorBrowserClient } from "@/lib/supabase/client";
 import { syncWithSherdog, type SherdogSyncStatus } from "@/lib/sherdog-sync";
+import { fetchOwnProfileMe } from "@/lib/profile-me-api";
 import {
   fetchFundraiserProgress,
   type FundraiserProgress,
@@ -845,16 +846,9 @@ export function PassportView({
     });
 
     if (viewerId) {
-      void client
-        .from("profiles")
-        .select("balance")
-        .eq("id", viewerId)
-        .maybeSingle()
-        .then(({ data }) => {
-          if (data && "balance" in data) {
-            setDonorBalance(Number(data.balance) || 0);
-          }
-        });
+      void fetchOwnProfileMe(viewerId).then((own) => {
+        if (own) setDonorBalance(own.balance);
+      });
     }
   }, [fighterId, viewerId]);
 

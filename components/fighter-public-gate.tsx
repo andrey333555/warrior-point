@@ -4,9 +4,8 @@ import { useEffect, useState } from "react";
 import FighterPublicPage from "@/components/fighter-public-page";
 import type { FighterPublicProfile } from "@/lib/fighter-public";
 import type { WarriorRole } from "@/lib/roles";
-import { resolveWarriorRole } from "@/lib/roles";
 import { useWarriorAuth } from "@/hooks/use-warrior-auth";
-import { createWarriorBrowserClient } from "@/lib/supabase/client";
+import { fetchOwnProfileMe } from "@/lib/profile-me-api";
 
 export default function FighterPublicGate({
   profile: initial,
@@ -24,20 +23,10 @@ export default function FighterPublicGate({
       setViewerRole(null);
       return;
     }
-    const client = createWarriorBrowserClient();
-    if (!client) {
-      setViewerRole("fighter");
-      return;
-    }
     let cancelled = false;
-    void client
-      .from("profiles")
-      .select("role")
-      .eq("id", auth.user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (!cancelled) setViewerRole(resolveWarriorRole(data?.role));
-      });
+    void fetchOwnProfileMe(auth.user.id).then((own) => {
+      if (!cancelled) setViewerRole(own?.role ?? "fighter");
+    });
     return () => {
       cancelled = true;
     };

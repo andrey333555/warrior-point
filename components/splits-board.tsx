@@ -6,12 +6,9 @@ import { AnimatePresence, motion } from "framer-motion";
 import type { WarriorRole } from "@/lib/roles";
 import { canRecordSessions } from "@/lib/roles";
 import type { TrainingSplit } from "@/lib/splits";
-import {
-  fetchSplits,
-  createSplit,
-  cancelSplit,
-} from "@/lib/supabase/splits-sync";
+import { fetchSplits } from "@/lib/supabase/splits-sync";
 import { bookSplitSeat } from "@/lib/split-booking-api";
+import { createSplitViaApi, cancelSplitViaApi } from "@/lib/splits-api";
 import { SplitCreator } from "@/components/split-creator";
 import { SplitCard } from "@/components/split-card";
 
@@ -80,15 +77,15 @@ export function SplitsBoard({
       pricePerSeat: number;
       maxSeats: number;
     }) => {
-      if (!client) return { error: new Error("Supabase not configured") };
-
-      const coachId = role === "admin" ? "WP-ADMIN-001" : DEMO_COACH_ID;
-      const { error } = await createSplit(client, { ...payload, coachId });
+      const { error } = await createSplitViaApi({
+        ...payload,
+        coachId: currentFighterId,
+      });
 
       if (!error) void refresh();
       return { error };
     },
-    [client, role, refresh],
+    [currentFighterId, refresh],
   );
 
   const handleBook = useCallback(
@@ -111,13 +108,14 @@ export function SplitsBoard({
 
   const handleCancel = useCallback(
     async (splitId: string) => {
-      if (!client) return { error: new Error("Supabase not configured") };
-
-      const { error } = await cancelSplit(client, splitId);
+      const { error } = await cancelSplitViaApi({
+        coachId: currentFighterId,
+        splitId,
+      });
       if (!error) void refresh();
       return { error };
     },
-    [client, refresh],
+    [currentFighterId, refresh],
   );
 
   return (
