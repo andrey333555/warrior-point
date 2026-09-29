@@ -36,7 +36,6 @@ import { DEMO_FIGHTER_INITIALS, DEMO_FIGHTER_PORTRAIT } from "@/lib/warrior-cons
 import { DEFAULT_FIGHTER_IMAGE } from "@/lib/network";
 import {
   DonateModal,
-  SupportFighterButton,
   type DonatePaymentHandler,
 } from "@/components/donate-modal";
 import { PassportHero } from "@/components/tactical/fighter-hero-banner";
@@ -44,6 +43,10 @@ import SelfProgressCard from "@/components/SelfProgressCard";
 import ShareablePoster, {
   type ShareablePosterData,
 } from "@/components/ShareablePoster";
+import { LeagueBadge } from "@/components/LeagueIcons";
+import FighterMediaGallery from "@/components/FighterMediaGallery";
+import FighterSponsors from "@/components/FighterSponsors";
+import FundraisingProgress from "@/components/FundraisingProgress";
 import type { MonthActivity } from "@/lib/motivation";
 import { getRoundByXP } from "@/lib/levels";
 import { getReferralState } from "@/lib/referral";
@@ -102,10 +105,10 @@ const ROLE_ACCENT: Record<RoleMode, string> = {
 };
 
 const CONTRACTS = [
-  { id: "aca", label: "ACA", color: "#facc15" },
-  { id: "rcc", label: "RCC", color: "#f87171" },
-  { id: "fng", label: "FN", color: "#34d399" },
-  { id: "ufc", label: "UFC", color: "#ef4444" },
+  { id: "aca", label: "ACA", league: "ACA" as const, color: "#facc15" },
+  { id: "rcc", label: "RCC", league: "RCC" as const, color: "#f87171" },
+  { id: "fng", label: "FN", league: "FN" as const, color: "#34d399" },
+  { id: "ufc", label: "UFC", league: "UFC" as const, color: "#ef4444" },
 ] as const;
 
 const fmtRub = new Intl.NumberFormat("ru-RU", {
@@ -617,19 +620,15 @@ function ContractsScroll({
     <div className="mt-6 px-4">
       <h3 className="mb-2 text-sm text-white/40">КОНТРАКТЫ</h3>
       <div className="flex gap-3 overflow-x-auto scrollbar-hide">
-        {CONTRACTS.map(({ id, label }) => {
+        {CONTRACTS.map(({ id, league }) => {
           const isActive = activeLeague === id;
           return (
-            <button
+            <LeagueBadge
               key={id}
-              type="button"
+              league={league}
+              active={isActive}
               onClick={() => onLeagueClick(id)}
-              className={`shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-white transition-all duration-300 ease-out ${PURPLE_HOVER_SHADOW} hover:border-purple-400/40 hover:bg-purple-500/20 active:scale-95 ${
-                isActive ? "border-purple-400/40 bg-purple-500/20 shadow-[0_0_20px_rgba(168,85,247,0.3)]" : ""
-              }`}
-            >
-              {label}
-            </button>
+            />
           );
         })}
       </div>
@@ -790,6 +789,7 @@ export function PassportView({
   const [liveRecord, setLiveRecord] = useState(stats.proRecord);
   const [liveElo, setLiveElo] = useState(stats.elo);
   const [isDonateModalOpen, setIsDonateModalOpen] = useState(false);
+  const [donatePreset, setDonatePreset] = useState<number | undefined>(undefined);
   const [showShare, setShowShare] = useState(false);
   const { setDonateOpen } = useDonateUi();
   const [donateBusy, setDonateBusy] = useState(false);
@@ -900,6 +900,7 @@ export function PassportView({
     setIsDonateModalOpen(false);
     setDonateOpen(false);
     setDonateError(null);
+    setDonatePreset(undefined);
   }, [setDonateOpen]);
 
   const sharePosterData = useMemo(
@@ -916,11 +917,19 @@ export function PassportView({
 
   const statPairs = statsPairsFor(role, stats, econ);
 
+  const openDonate = useCallback((amount: number) => {
+    setDonatePreset(amount > 0 ? amount : undefined);
+    setIsDonateModalOpen(true);
+    setDonateOpen(true);
+  }, [setDonateOpen]);
+
   const handleLeagueClick = (id: string) => {
     setActiveLeague((prev) => (prev === id ? null : id));
   };
 
   return (
+    <>
+    <div className="max-w-md mx-auto overflow-x-hidden">
     <div className="flex min-h-full flex-col gap-4 pb-2">
       <motion.div {...sectionMotion(0)}>
         <PassportTop
@@ -987,6 +996,20 @@ export function PassportView({
         </AnimatePresence>
       ) : null}
 
+      {role === "fighter" ? (
+        <motion.div {...sectionMotion(0.03)} className="mx-5">
+          <FundraisingProgress
+            title="Сборы в Краснодар"
+            description="Подготовка к главному бою года"
+            goal={500000}
+            raised={127500}
+            supporters={43}
+            daysLeft={18}
+            onSupport={openDonate}
+          />
+        </motion.div>
+      ) : null}
+
       <motion.div
         {...sectionMotion(0.04)}
         className="mx-5 rounded-2xl border border-white/[0.08] bg-zinc-900/60 p-3"
@@ -1014,17 +1037,6 @@ export function PassportView({
         <SelfProgressCard activity={SELF_PROGRESS_ACTIVITY} />
       </motion.div>
 
-      {role === "fighter" && fighterId ? (
-        <motion.div {...sectionMotion(0.07)} className="mx-5 flex justify-center">
-          <SupportFighterButton
-            onClick={() => {
-              setIsDonateModalOpen(true);
-              setDonateOpen(true);
-            }}
-          />
-        </motion.div>
-      ) : null}
-
       <AnimatePresence mode="popLayout">
         <motion.div
           key={role}
@@ -1041,6 +1053,20 @@ export function PassportView({
           )}
         </motion.div>
       </AnimatePresence>
+
+      {role === "fighter" ? (
+        <motion.div {...sectionMotion(0.08)} className="mx-5">
+          <FighterMediaGallery />
+        </motion.div>
+      ) : null}
+
+      {role === "fighter" ? (
+        <motion.div {...sectionMotion(0.1)} className="mx-5">
+          <FighterSponsors
+            isOwner={Boolean(viewerId && fighterId && viewerId === fighterId)}
+          />
+        </motion.div>
+      ) : null}
 
       {stats.aiAnalysis ? (
         <motion.div {...sectionMotion(0.12)}>
@@ -1102,6 +1128,8 @@ export function PassportView({
         </motion.div>
       ) : null}
 
+    </div>
+    </div>
       <DonateModal
         open={isDonateModalOpen}
         onClose={closeDonateModal}
@@ -1112,6 +1140,7 @@ export function PassportView({
         busy={donateBusy}
         error={donateError}
         onDonate={submitDonate}
+        initialAmount={donatePreset}
       />
 
       {showShare ? (
@@ -1120,6 +1149,6 @@ export function PassportView({
           onClose={() => setShowShare(false)}
         />
       ) : null}
-    </div>
+    </>
   );
 }

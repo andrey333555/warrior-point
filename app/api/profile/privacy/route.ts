@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server";
 import { createWarriorServiceClient } from "@/lib/supabase/server-admin";
-import { createWarriorBrowserClient } from "@/lib/supabase/client";
 import {
+  DONATION_GOAL_MAX_LEN,
+  NICKNAME_MAX_LEN,
   isProfileVisibility,
   privacyPatchToRow,
   type PrivacyPatch,
   type ProfileVisibility,
 } from "@/lib/fighter-public";
 import { canEditProfilePrivacy } from "@/lib/api-actor";
+import { hashedClientKey, jsonError, readJsonBody, safeDbMessage } from "@/lib/api-request";
+import { rateLimit } from "@/lib/rate-limit";
+import { isAllowedHttpsUrl } from "@/lib/https-url";
 
 type Body = {
   actorId?: string;
@@ -22,36 +26,32 @@ type Body = {
   bio?: string | null;
   avatarUrl?: string | null;
   record?: string | null;
+  donationGoal?: string | null;
+  nickname?: string | null;
 };
 
-function client() {
-  return createWarriorServiceClient() ?? createWarriorBrowserClient();
+function writeClient() {
+  return createWarriorServiceClient();
 }
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
-  const profileId = url.searchParams.get("profileId")?.trim();
+  const profileId = url.searchParams.get("profileId")?.trim() ?? "";
   const actorId = url.searchParams.get("actorId")?.trim();
-  if (!profileId) {
-    return NextResponse.json(
-      { ok: false, message: "profileId обязателен" },
-      { status: 400 },
-    );
+  if (!profileId || profileId.length > 128) {
+    return jsonError("profileId обязателен", 400);
   }
 
-  // Read: own profile or public fields — still require actorId for write-path symmetry
-  // when loading settings UI (own only).
-  if (actorId && actorId !== profileId) {
-    const gate = await canEditProfilePrivacy({ actorId, profileId });
-    if (!gate.ok) {
-      return NextResponse.json(
-        { ok: false, message: gate.message },
-        { status: gate.status },
-      );
-    }
+  const gate = await canEditProfilePrivacy({
+    actorId,
+    profileId,
+    adminSecret: req.headers.get("x-warrior-admin-secret"),
+  });
+  if (!gate.ok) {
+    return jsonError(gate.message, gate.status);
   }
 
-  const sb = client();
+  const sb = writeClient();
   if (!sb) {
     return NextResponse.json({
       ok: true,
@@ -67,6 +67,8 @@ export async function GET(req: Request) {
         bio: null,
         avatarUrl: null,
         record: null,
+        donationGoal: null,
+        nickname: null,
       },
     });
   }
@@ -74,16 +76,13 @@ export async function GET(req: Request) {
   const { data, error } = await sb
     .from("profiles")
     .select(
-      "booking_enabled, visibility, hide_weight_class, hide_club, hide_bio, hide_record, slug, bio, avatar_url, record",
+      "booking_enabled, visibility, hide_weight_class, hide_club, hide_bio, hide_record, slug, bio, avatar_url, record, donation_goal, nickname",
     )
     .eq("id", profileId)
     .maybeSingle();
 
   if (error) {
-    return NextResponse.json(
-      { ok: false, message: error.message },
-      { status: 502 },
-    );
+    return jsonError(safeDbMessage(error.message), 502);
   }
 
   return NextResponse.json({
@@ -101,24 +100,28 @@ export async function GET(req: Request) {
       bio: typeof data?.bio === "string" ? data.bio : null,
       avatarUrl: typeof data?.avatar_url === "string" ? data.avatar_url : null,
       record: typeof data?.record === "string" ? data.record : null,
+      donationGoal:
+        typeof data?.donation_goal === "string" ? data.donation_goal : null,
+      nickname: typeof data?.nickname === "string" ? data.nickname : null,
     },
   });
 }
 
 export async function POST(req: Request) {
-  let body: Body;
-  try {
-    body = (await req.json()) as Body;
-  } catch {
-    return NextResponse.json({ ok: false, message: "Invalid JSON" }, { status: 400 });
-  }
+  const limited = rateLimit({
+    key: `privacy:${hashedClientKey(req)}`,
+    limit: 20,
+    windowMs: 60_000,
+  });
+  if (!limited.ok) return jsonError("Слишком много запросов", 429);
+
+  const parsed = await readJsonBody<Body>(req);
+  if (!parsed.ok) return jsonError(parsed.message, parsed.status);
+  const body = parsed.body;
 
   const profileId = body.profileId?.trim();
   if (!profileId) {
-    return NextResponse.json(
-      { ok: false, message: "profileId обязателен" },
-      { status: 400 },
-    );
+    return jsonError("profileId обязателен", 400);
   }
 
   const gate = await canEditProfilePrivacy({
@@ -127,30 +130,42 @@ export async function POST(req: Request) {
     adminSecret: req.headers.get("x-warrior-admin-secret"),
   });
   if (!gate.ok) {
-    return NextResponse.json(
-      { ok: false, message: gate.message },
-      { status: gate.status },
-    );
+    return jsonError(gate.message, gate.status);
   }
 
   if (body.visibility !== undefined && !isProfileVisibility(body.visibility)) {
-    return NextResponse.json(
-      { ok: false, message: "visibility: public | limited | private" },
-      { status: 400 },
-    );
+    return jsonError("visibility: public | limited | private", 400);
   }
 
   if (body.slug !== undefined) {
     const slug = body.slug.trim().toLowerCase();
     if (!/^[a-z0-9][a-z0-9-]{1,46}[a-z0-9]$/.test(slug)) {
-      return NextResponse.json(
-        {
-          ok: false,
-          message: "slug: 3–48 символов, латиница, цифры, дефис",
-        },
-        { status: 400 },
-      );
+      return jsonError("slug: 3–48 символов, латиница, цифры, дефис", 400);
     }
+  }
+
+  if (typeof body.bio === "string" && body.bio.length > 2000) {
+    return jsonError("bio слишком длинный", 400);
+  }
+
+  if (typeof body.avatarUrl === "string" && body.avatarUrl.trim()) {
+    if (!isAllowedHttpsUrl(body.avatarUrl)) {
+      return jsonError("avatarUrl: только https", 400);
+    }
+  }
+
+  if (typeof body.record === "string" && body.record.trim()) {
+    if (!/^[0-9]{1,3}-[0-9]{1,3}(-[0-9]{1,3})?$/.test(body.record.trim())) {
+      return jsonError("record: формат W-L или W-L-D", 400);
+    }
+  }
+
+  if (typeof body.donationGoal === "string" && body.donationGoal.trim().length > DONATION_GOAL_MAX_LEN) {
+    return jsonError(`Цель доната: до ${DONATION_GOAL_MAX_LEN} символов`, 400);
+  }
+
+  if (typeof body.nickname === "string" && body.nickname.trim().length > NICKNAME_MAX_LEN) {
+    return jsonError(`Никнейм: до ${NICKNAME_MAX_LEN} символов`, 400);
   }
 
   const patch: PrivacyPatch = {
@@ -166,31 +181,23 @@ export async function POST(req: Request) {
     bio: body.bio,
     avatarUrl: body.avatarUrl,
     record: body.record,
+    donationGoal: body.donationGoal,
+    nickname: body.nickname,
   };
 
   const row = privacyPatchToRow(patch);
   if (Object.keys(row).length <= 1) {
-    return NextResponse.json(
-      { ok: false, message: "Нет полей для обновления" },
-      { status: 400 },
-    );
+    return jsonError("Нет полей для обновления", 400);
   }
 
-  const sb = client();
+  const sb = writeClient();
   if (!sb) {
-    return NextResponse.json({
-      ok: true,
-      mock: true,
-      message: "Supabase не настроен — сохранено локально на клиенте",
-    });
+    return jsonError("Нужен SUPABASE_SERVICE_ROLE_KEY", 503);
   }
 
   const { error } = await sb.from("profiles").update(row).eq("id", profileId);
   if (error) {
-    return NextResponse.json(
-      { ok: false, message: error.message },
-      { status: 502 },
-    );
+    return jsonError(safeDbMessage(error.message), 502);
   }
 
   return NextResponse.json({ ok: true });

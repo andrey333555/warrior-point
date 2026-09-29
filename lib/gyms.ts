@@ -62,6 +62,14 @@ export type GymEntry = {
   accent: "cyan" | "fuchsia" | "amber" | "emerald" | "violet" | "rose";
   /** true = no coordinates yet, skip map placement. */
   pending?: boolean;
+  /** Club timetable (not bookable splits). */
+  schedule?: readonly GymScheduleSlot[];
+};
+
+export type GymScheduleSlot = {
+  discipline: string;
+  times: string;
+  phone?: string | null;
 };
 
 // ── Клуб «Кузня» — 10 официальных филиалов ──────────────────────────────────
@@ -90,6 +98,54 @@ const KUZNYA_GYMS: GymEntry[] = [
     ],
     instagram: "@kuznya_krd",
     accent: "cyan",
+  },
+  {
+    id: "kuznya-krd-sokol",
+    name: "БК «Кузня»",
+    category: "kuznya",
+    network: "kuznya",
+    city: "Краснодар",
+    address: "ул. Береговая, 9 (ЦСЕ «Сокол»)",
+    lat: 45.015096,
+    lng: 38.966952,
+    coachId: "WP-COACH-001",
+    coachName: "Сергей Романов",
+    specializations: [
+      "Бокс",
+      "Тайский бокс",
+      "MMA",
+      "Рукопашный бой",
+      "Функциональный тренинг",
+    ],
+    phone: "+7 918 430-03-30",
+    instagram: "@kuznya_fight_club",
+    accent: "cyan",
+    schedule: [
+      {
+        discipline: "Бокс",
+        times: "Вт–Чт 17:30, Сб 09:00",
+        phone: "+7 918 430-03-30",
+      },
+      {
+        discipline: "Тайский бокс",
+        times: "Вт–Чт 19:00, Сб 11:00",
+        phone: "+7 909 458-98-00",
+      },
+      {
+        discipline: "ММА / рукопашный (7–13 лет)",
+        times: "Пн–Ср–Пт 17:30",
+        phone: "+7 952 856-03-10, +7 952 465-71-56",
+      },
+      {
+        discipline: "Смешанные единоборства (14+)",
+        times: "Пн–Ср–Пт 19:00",
+        phone: "+7 900 286-58-30, +7 908 678-17-00",
+      },
+      {
+        discipline: "Функциональный тренинг",
+        times: "Ср 16:00, Сб 10:00",
+      },
+    ],
   },
   {
     id: "kuznya-krd-pamirskaya",

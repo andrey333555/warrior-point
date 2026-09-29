@@ -3,8 +3,17 @@ import {
   handleBookSplit,
   type BookSplitResult,
 } from "@/lib/supabase/split-booking";
-import { createWarriorServerWriteClient } from "@/lib/supabase/server-write";
-import { requireBoundUserId } from "@/lib/api-session";
+import { requireBoundUserId, isLiveEconomyLocked } from "@/lib/api-session";
+import {
+  hashedClientKey,
+  jsonError,
+  readJsonBody,
+  requireWriteClient,
+} from "@/lib/api-request";
+import { rateLimit } from "@/lib/rate-limit";
+import { rpcBookSplit } from "@/lib/supabase/economy-rpc";
+import { splitSettlement } from "@/lib/economy";
+import { SPLIT_CLIENT_GROSS_RUB } from "@/lib/supabase/split-booking";
 
 export const runtime = "nodejs";
 
@@ -25,46 +34,60 @@ const ERROR_STATUS: Record<
   DB_ERROR: 502,
 };
 
-/**
- * Server-authoritative split booking.
- * clientId must match authenticated session (or demo gate).
- */
 export async function POST(req: Request) {
-  let body: BookBody;
-  try {
-    body = (await req.json()) as BookBody;
-  } catch {
-    return NextResponse.json({ ok: false, message: "Invalid JSON" }, { status: 400 });
-  }
+  const limited = rateLimit({
+    key: `split-book:${hashedClientKey(req)}`,
+    limit: 20,
+    windowMs: 60_000,
+  });
+  if (!limited.ok) return jsonError("Слишком много запросов", 429);
+
+  const parsed = await readJsonBody<BookBody>(req);
+  if (!parsed.ok) return jsonError(parsed.message, parsed.status);
+  const body = parsed.body;
 
   const claimedClient =
     typeof body.clientId === "string" ? body.clientId.trim() : "";
   const splitId = typeof body.splitId === "string" ? body.splitId.trim() : "";
 
-  if (!splitId) {
-    return NextResponse.json(
-      { ok: false, message: "splitId обязателен" },
-      { status: 400 },
-    );
+  if (!splitId || splitId.length > 64) {
+    return jsonError("splitId обязателен", 400);
   }
 
   const bound = await requireBoundUserId(claimedClient || null);
   if (!bound.ok) {
-    return NextResponse.json(
-      { ok: false, message: bound.message },
-      { status: bound.status },
-    );
+    return jsonError(bound.message, bound.status);
   }
 
-  const client = createWarriorServerWriteClient();
-  if (!client) {
-    return NextResponse.json(
-      { ok: false, message: "Supabase не настроен" },
-      { status: 503 },
-    );
+  const write = requireWriteClient();
+  if (!write.ok) return jsonError(write.message, write.status);
+
+  const rpc = await rpcBookSplit(write.client, {
+    splitId,
+    clientId: bound.userId,
+    grossRub: SPLIT_CLIENT_GROSS_RUB,
+  });
+
+  if (rpc.ok) {
+    return NextResponse.json({
+      ok: true,
+      bookedCount: rpc.bookedCount,
+      activated: rpc.activated,
+      newBalance: rpc.newBalance,
+      dailyStreak: rpc.dailyStreak,
+      iphoneTickets: rpc.iphoneTickets,
+      breakdown: splitSettlement(SPLIT_CLIENT_GROSS_RUB),
+    });
   }
 
-  const result = await handleBookSplit(client, {
+  if (rpc.code !== "DB_ERROR" || isLiveEconomyLocked()) {
+    const status =
+      ERROR_STATUS[rpc.code as Extract<BookSplitResult, { ok: false }>["code"]] ??
+      502;
+    return jsonError(rpc.message, status);
+  }
+
+  const result = await handleBookSplit(write.client, {
     splitId,
     clientId: bound.userId,
   });

@@ -7,12 +7,19 @@ import {
   type FundraiserProgress,
 } from "@/lib/supabase/donations";
 import { isGuestDonorId } from "@/lib/guest-donor";
-import { createWarriorServerWriteClient } from "@/lib/supabase/server-write";
 import {
   getApiSessionUserId,
   isDemoEconomyAllowed,
   isLiveEconomyLocked,
 } from "@/lib/api-session";
+import {
+  hashedClientKey,
+  jsonError,
+  readJsonBody,
+  requireWriteClient,
+} from "@/lib/api-request";
+import { rateLimit } from "@/lib/rate-limit";
+import { rpcWalletDonate } from "@/lib/supabase/economy-rpc";
 
 export const runtime = "nodejs";
 
@@ -20,7 +27,6 @@ type DonateBody = {
   recipientId?: string;
   grossRub?: number;
   comment?: string;
-  /** Ignored for auth — session decides donor. Kept for back-compat. */
   donorId?: string;
   guestDonorId?: string;
   fundraiserFallback?: FundraiserProgress;
@@ -28,18 +34,17 @@ type DonateBody = {
 
 const MAX_DONATION_RUB = 1_000_000;
 
-/**
- * Server-authoritative donation endpoint.
- * Wallet debit only for the authenticated session user.
- * Unpaid guest "SBP" mint is blocked in production unless ALLOW_DEMO_ECONOMY=1.
- */
 export async function POST(req: Request) {
-  let body: DonateBody;
-  try {
-    body = (await req.json()) as DonateBody;
-  } catch {
-    return NextResponse.json({ ok: false, message: "Invalid JSON" }, { status: 400 });
-  }
+  const limited = rateLimit({
+    key: `donate:${hashedClientKey(req)}`,
+    limit: 20,
+    windowMs: 60_000,
+  });
+  if (!limited.ok) return jsonError("Слишком много запросов", 429);
+
+  const parsed = await readJsonBody<DonateBody>(req);
+  if (!parsed.ok) return jsonError(parsed.message, parsed.status);
+  const body = parsed.body;
 
   const recipientId =
     typeof body.recipientId === "string" ? body.recipientId.trim() : "";
@@ -48,26 +53,16 @@ export async function POST(req: Request) {
     typeof body.comment === "string" ? body.comment.slice(0, 280) : undefined;
 
   if (!recipientId || recipientId.length > 128) {
-    return NextResponse.json(
-      { ok: false, message: "recipientId обязателен" },
-      { status: 400 },
-    );
+    return jsonError("recipientId обязателен", 400);
   }
 
   if (!Number.isFinite(grossRub) || grossRub < 50 || grossRub > MAX_DONATION_RUB) {
-    return NextResponse.json(
-      { ok: false, message: "Сумма доната: от 50 ₽ до 1 000 000 ₽" },
-      { status: 400 },
-    );
+    return jsonError("Сумма доната: от 50 ₽ до 1 000 000 ₽", 400);
   }
 
-  const client = createWarriorServerWriteClient();
-  if (!client) {
-    return NextResponse.json(
-      { ok: false, code: "NO_SUPABASE", message: "Supabase не настроен" },
-      { status: 503 },
-    );
-  }
+  const write = requireWriteClient();
+  if (!write.ok) return jsonError(write.message, write.status);
+  const client = write.client;
 
   const sessionUserId = await getApiSessionUserId();
   const guestDonorId =
@@ -75,60 +70,72 @@ export async function POST(req: Request) {
       ? body.guestDonorId
       : "";
 
+  if (
+    typeof body.donorId === "string" &&
+    body.donorId.trim() &&
+    body.donorId.trim() !== sessionUserId
+  ) {
+    return jsonError("donorId не совпадает с сессией", 403);
+  }
+
   let result: DonateResult | null = null;
   let source: "wallet" | "sbp_guest" = "sbp_guest";
 
-  // 1. Wallet path — ONLY the session user can spend their balance.
-  if (sessionUserId && sessionUserId !== recipientId) {
-    const walletResult = await handleDonate(client, {
+  if (sessionUserId) {
+    if (sessionUserId === recipientId) {
+      return jsonError("Нельзя поддержать собственный профиль", 400);
+    }
+
+    const rpc = await rpcWalletDonate(client, {
       donorId: sessionUserId,
       recipientId,
       grossRub,
       comment,
     });
 
-    if (walletResult.ok) {
+    if (rpc.ok) {
+      result = {
+        ok: true,
+        donationId: rpc.donationId,
+        newDonorBalance: rpc.newDonorBalance,
+        breakdown: rpc.breakdown,
+      };
+      source = "wallet";
+    } else if (rpc.code === "INSUFFICIENT_BALANCE") {
+      return jsonError("Недостаточно средств на балансе", 402);
+    } else if (rpc.code === "INVALID_AMOUNT" || rpc.code === "SELF_DONATE") {
+      return jsonError(rpc.message, 400);
+    } else {
+      const walletResult = await handleDonate(client, {
+        donorId: sessionUserId,
+        recipientId,
+        grossRub,
+        comment,
+      });
+      if (!walletResult.ok) {
+        const status =
+          walletResult.code === "INSUFFICIENT_BALANCE"
+            ? 402
+            : walletResult.code === "INVALID_AMOUNT"
+              ? 400
+              : 502;
+        return jsonError(walletResult.message, status);
+      }
       result = walletResult;
       source = "wallet";
-    } else if (walletResult.code === "INVALID_AMOUNT") {
-      return NextResponse.json(
-        { ok: false, message: walletResult.message },
-        { status: 400 },
-      );
     }
-    // INSUFFICIENT_BALANCE → fall through only if demo guest tips allowed
   }
 
-  // Reject spoofed donorId that doesn't match session
-  if (
-    typeof body.donorId === "string" &&
-    body.donorId.trim() &&
-    body.donorId.trim() !== sessionUserId
-  ) {
-    return NextResponse.json(
-      { ok: false, message: "donorId не совпадает с сессией" },
-      { status: 403 },
-    );
-  }
-
-  // 2. Guest SBP — blocked in live prod (no payment proof = free mint).
   if (!result) {
     if (isLiveEconomyLocked() || !isDemoEconomyAllowed()) {
-      return NextResponse.json(
-        {
-          ok: false,
-          message:
-            "Гостевой донат без оплаты отключён. Войдите или подключите ЮKassa.",
-        },
-        { status: 401 },
+      return jsonError(
+        "Гостевой донат без оплаты отключён. Войдите или подключите ЮKassa.",
+        401,
       );
     }
 
     if (!guestDonorId) {
-      return NextResponse.json(
-        { ok: false, message: "Нужна авторизация или guestDonorId (demo)" },
-        { status: 400 },
-      );
+      return jsonError("Нужна авторизация или guestDonorId (demo)", 400);
     }
 
     const sbpResult = await handleGuestSbpDonate(client, {
@@ -139,9 +146,9 @@ export async function POST(req: Request) {
     });
 
     if (!sbpResult.ok) {
-      return NextResponse.json(
-        { ok: false, message: sbpResult.message },
-        { status: sbpResult.code === "INVALID_AMOUNT" ? 400 : 502 },
+      return jsonError(
+        sbpResult.message,
+        sbpResult.code === "INVALID_AMOUNT" ? 400 : 502,
       );
     }
     result = sbpResult;

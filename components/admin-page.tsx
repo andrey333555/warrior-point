@@ -109,10 +109,17 @@ export default function AdminPage() {
           </button>
           <h1 className="text-2xl font-bold">Админ · каркас</h1>
           <p className="text-xs text-white/40">
-            Просмотр / экспорт. Coach — read-only. Стримы — backlog.
+            Просмотр / экспорт. Coach — read-only. Импорт бойцов — только admin.
           </p>
         </div>
         <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => router.push("/admin/fighters/import")}
+            className="rounded-xl bg-[#C9A84C] px-3 py-2 text-xs font-bold text-black"
+          >
+            Импорт бойцов
+          </button>
           <button
             type="button"
             onClick={exportCsv}

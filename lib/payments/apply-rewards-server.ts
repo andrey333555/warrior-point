@@ -1,48 +1,29 @@
 import type { PaymentIntent } from "@/lib/payments/types";
-import { buildPaymentSettlement } from "@/lib/payments/settle";
-import { creditProfileBalance } from "@/lib/payments/wallet-server";
 import { createWarriorServerWriteClient } from "@/lib/supabase/server-write";
-import { recordServerTrainingSession } from "@/lib/supabase/session-server";
+import {
+  rpcApplyPaymentRewards,
+  type PaymentRewardRpc,
+} from "@/lib/supabase/economy-rpc";
 
 /**
  * Server-side reward application on the pending → succeeded transition.
- *
- * Writes the verified `training_sessions` row, advances `fighter_stats` XP,
- * and credits cashback to `profiles.balance` — all with the service-role
- * client. Runs from the webhook (real YooKassa) and mock-pay (demo).
+ * Idempotent RPC: one payment = one XP mint + one cashback credit.
  */
 export async function applyServerPaymentRewards(
   intent: PaymentIntent,
-): Promise<void> {
-  if (!intent.fighterId) return;
+): Promise<PaymentRewardRpc> {
+  if (!intent.fighterId) {
+    return { ok: false, status: 402, message: "Платёж без бойца" };
+  }
 
   const client = createWarriorServerWriteClient();
-  if (!client) return;
-
-  const result = await recordServerTrainingSession(client, {
-    fighterId: intent.fighterId,
-    grossRub: intent.grossRub,
-    sessionType: "marketplace_booking",
-  });
-
-  if (!result.ok) {
-    console.warn(
-      `[payments] server reward application failed for ${intent.id}: ${result.message}`,
-    );
-    return;
+  if (!client) {
+    return {
+      ok: false,
+      status: 503,
+      message: "Supabase не настроен",
+    };
   }
 
-  const settlement = buildPaymentSettlement(intent.grossRub);
-  if (settlement.cashbackRub > 0) {
-    const wallet = await creditProfileBalance(
-      client,
-      intent.fighterId,
-      settlement.cashbackRub,
-    );
-    if (!wallet.ok) {
-      console.warn(
-        `[payments] cashback credit failed for ${intent.id}: ${wallet.message}`,
-      );
-    }
-  }
+  return rpcApplyPaymentRewards(client, intent.id);
 }

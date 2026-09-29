@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   bookingDates,
   bookingGym,
@@ -10,7 +10,10 @@ import {
   trainers,
   type TrainingType,
 } from "@/lib/data";
+import { findTrainer } from "@/lib/network";
 import { Button } from "@/components/ui/button";
+import { resolveTrainerIdForCoachSlug } from "@/lib/fighter-booking";
+import { DEMO_FIGHTER_FULL_NAME } from "@/lib/warrior-constants";
 
 function FlowArrow() {
   return <p className="py-1 text-center text-lg text-zinc-700">↓</p>;
@@ -25,21 +28,48 @@ function StepLabel({ title, hint }: { title: string; hint: string }) {
   );
 }
 
-export default function BookingPage() {
+function BookingPageInner() {
   const router = useRouter();
-  const trainer = trainers[0]!;
+  const searchParams = useSearchParams();
+  const coachSlug = (searchParams.get("coach") ?? "").trim().toLowerCase();
+
+  const trainer = useMemo(() => {
+    const mappedId = resolveTrainerIdForCoachSlug(coachSlug);
+    return (mappedId ? findTrainer(mappedId) : null) ?? trainers[0]!;
+  }, [coachSlug]);
+
+  const fighterCard = useMemo(() => {
+    if (!coachSlug) return inspiredFighter;
+    if (coachSlug === "king") {
+      return {
+        id: coachSlug,
+        name: DEMO_FIGHTER_FULL_NAME,
+        tag: `/${coachSlug}`,
+      };
+    }
+    return {
+      id: coachSlug,
+      name: coachSlug,
+      tag: `/${coachSlug}`,
+    };
+  }, [coachSlug]);
+
   const defaultSplit = trainer.trainings[0]!;
 
   const [selectedSplit, setSelectedSplit] = useState<TrainingType>(defaultSplit);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
 
+  if (selectedSplit && !trainer.trainings.some((t) => t.id === selectedSplit.id)) {
+    setSelectedSplit(defaultSplit);
+  }
+
   return (
     <div className="p-4 text-white">
-      <StepLabel title="Боец" hint="вдохновил" />
+      <StepLabel title="Боец" hint={coachSlug ? "с витрины" : "вдохновил"} />
       <div className="rounded-2xl bg-zinc-900 p-4">
-        <h2 className="text-lg font-semibold">{inspiredFighter.name}</h2>
-        <p className="text-sm text-gray-400">{inspiredFighter.tag}</p>
+        <h2 className="text-lg font-semibold">{fighterCard.name}</h2>
+        <p className="text-sm text-gray-400">{fighterCard.tag}</p>
       </div>
 
       <FlowArrow />
@@ -159,5 +189,17 @@ export default function BookingPage() {
         Подтвердить запись
       </Button>
     </div>
+  );
+}
+
+export default function BookingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-4 text-sm text-white/40">Загрузка записи…</div>
+      }
+    >
+      <BookingPageInner />
+    </Suspense>
   );
 }

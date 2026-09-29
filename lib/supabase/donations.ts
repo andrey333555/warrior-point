@@ -157,7 +157,7 @@ export async function fetchFundraiserProgress(
   }
 
   const { data: donationRows } = await client
-    .from("donations")
+    .from("donations_public")
     .select("net_amount")
     .eq("recipient_id", recipientId);
 
@@ -186,34 +186,21 @@ export async function fetchDonationFeed(
   limit = 12,
 ): Promise<DonationRow[]> {
   const { data: rows, error } = await client
-    .from("donations")
-    .select("id, donor_id, gross_amount, net_amount, comment, created_at")
+    .from("donations_public")
+    .select("id, supporter_name, gross_amount, net_amount, created_at")
     .eq("recipient_id", recipientId)
     .order("created_at", { ascending: false })
     .limit(limit);
 
   if (error || !rows?.length) return [];
 
-  const donorIds = [...new Set(rows.map((r) => r.donor_id as string))];
-  const { data: profiles } = await client
-    .from("profiles")
-    .select("id, display_name")
-    .in("id", donorIds);
-
-  const nameById = new Map(
-    (profiles ?? []).map((p) => [
-      p.id as string,
-      typeof p.display_name === "string" ? p.display_name : null,
-    ]),
-  );
-
   return rows.map((row) => ({
     id: row.id as string,
-    donorId: row.donor_id as string,
-    donorName: nameById.get(row.donor_id as string) ?? null,
+    donorId: "hidden",
+    donorName: typeof row.supporter_name === "string" ? row.supporter_name : null,
     grossAmount: num(row.gross_amount),
     netAmount: num(row.net_amount),
-    comment: typeof row.comment === "string" ? row.comment : null,
+    comment: null,
     createdAt: row.created_at as string,
   }));
 }

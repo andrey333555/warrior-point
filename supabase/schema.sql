@@ -107,6 +107,10 @@ ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS weight_class TEXT;
 ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS fighter_status TEXT;
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS donation_goal TEXT;
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS nickname TEXT;
 
 -- Enforce the role whitelist (drop+recreate so re-runs stay clean):
 ALTER TABLE public.profiles

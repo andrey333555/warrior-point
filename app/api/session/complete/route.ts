@@ -1,7 +1,14 @@
-import { NextResponse } from "next/server";
-import { recordServerTrainingSession } from "@/lib/supabase/session-server";
-import { createWarriorServerWriteClient } from "@/lib/supabase/server-write";
-import { requireBoundUserId, isLiveEconomyLocked } from "@/lib/api-session";
+import { applyServerPaymentRewards } from "@/lib/payments/apply-rewards-server";
+import { getPaymentIntent } from "@/lib/payments/store";
+import { rpcRecordTrainingOnce } from "@/lib/supabase/economy-rpc";
+import { requireWriteClient } from "@/lib/api-request";
+import { hashedClientKey, jsonError, readJsonBody } from "@/lib/api-request";
+import { rateLimit } from "@/lib/rate-limit";
+import {
+  isLiveEconomyLocked,
+  requireBoundUserId,
+} from "@/lib/api-session";
+import { randomUUID } from "node:crypto";
 
 export const runtime = "nodejs";
 
@@ -9,60 +16,92 @@ type SessionBody = {
   fighterId?: string;
   grossRub?: number;
   sessionType?: string;
-  /** Original queue timestamp for offline-synced sessions. */
   createdAt?: string;
-  /** Optional payment proof — required in live production. */
   paymentId?: string;
 };
 
 const MAX_SESSION_GROSS_RUB = 100_000;
 
 /**
- * Server-authoritative training session completion.
- * Identity must match session (or demo gate). Live prod requires paymentId.
+ * Live: consume a succeeded payment intent exactly once.
+ * Demo: optional unpaid session with server-generated source id.
  */
 export async function POST(req: Request) {
-  let body: SessionBody;
-  try {
-    body = (await req.json()) as SessionBody;
-  } catch {
-    return NextResponse.json({ ok: false, message: "Invalid JSON" }, { status: 400 });
-  }
+  const limited = rateLimit({
+    key: `session:${hashedClientKey(req)}`,
+    limit: 30,
+    windowMs: 60_000,
+  });
+  if (!limited.ok) return jsonError("Слишком много запросов", 429);
+
+  const parsed = await readJsonBody<SessionBody>(req);
+  if (!parsed.ok) return jsonError(parsed.message, parsed.status);
+  const body = parsed.body;
 
   const claimedFighter =
     typeof body.fighterId === "string" ? body.fighterId.trim() : "";
-  const grossRub = typeof body.grossRub === "number" ? body.grossRub : NaN;
-
   const bound = await requireBoundUserId(claimedFighter || null);
   if (!bound.ok) {
-    return NextResponse.json(
-      { ok: false, message: bound.message },
-      { status: bound.status },
-    );
+    return jsonError(bound.message, bound.status);
   }
   const fighterId = bound.userId;
 
-  if (!Number.isFinite(grossRub) || grossRub <= 0 || grossRub > MAX_SESSION_GROSS_RUB) {
-    return NextResponse.json(
-      { ok: false, message: "Некорректная сумма тренировки" },
-      { status: 400 },
-    );
-  }
+  const paymentId =
+    typeof body.paymentId === "string" ? body.paymentId.trim() : "";
 
-  // Live launch: free XP mint without payment is not allowed.
   if (isLiveEconomyLocked()) {
-    const paymentId =
-      typeof body.paymentId === "string" ? body.paymentId.trim() : "";
-    if (!paymentId) {
-      return NextResponse.json(
-        {
-          ok: false,
-          message: "Нужен paymentId — сессию нельзя закрыть без оплаты",
-        },
-        { status: 402 },
-      );
+    if (!paymentId || paymentId.length > 128) {
+      return jsonError("Нужен paymentId — сессию нельзя закрыть без оплаты", 402);
     }
   }
+
+  if (paymentId) {
+    const intent = await getPaymentIntent(paymentId);
+    if (!intent) {
+      return jsonError("Платёж не найден", 404);
+    }
+    if (intent.status !== "succeeded") {
+      return jsonError("Оплата ещё не подтверждена", 402);
+    }
+    if (intent.fighterId && intent.fighterId !== fighterId) {
+      return jsonError("Чужой платёж", 403);
+    }
+    if (!intent.fighterId) {
+      return jsonError("Платёж без бойца", 402);
+    }
+
+    const result = await applyServerPaymentRewards(intent);
+    if (!result.ok) {
+      return jsonError(result.message, result.status);
+    }
+
+    return Response.json({
+      ok: true,
+      alreadyGranted: result.alreadyGranted,
+      economics: {
+        breakdown: {
+          gross: result.grossRub,
+          commissionPct: 19,
+          commission: Math.round((result.grossRub * 19) / 100),
+          net: result.grossRub - Math.round((result.grossRub * 19) / 100),
+        },
+        xpAward: result.xpAwarded,
+      },
+      advancement: {
+        totalXpAfter: result.totalXpAfter,
+        levelAfter: result.levelAfter,
+      },
+      cashbackRub: result.cashbackRub,
+    });
+  }
+
+  const grossRub = typeof body.grossRub === "number" ? body.grossRub : NaN;
+  if (!Number.isFinite(grossRub) || grossRub <= 0 || grossRub > MAX_SESSION_GROSS_RUB) {
+    return jsonError("Некорректная сумма тренировки", 400);
+  }
+
+  const write = requireWriteClient();
+  if (!write.ok) return jsonError(write.message, write.status);
 
   let createdAt: string | undefined;
   if (typeof body.createdAt === "string") {
@@ -72,30 +111,31 @@ export async function POST(req: Request) {
     }
   }
 
-  const client = createWarriorServerWriteClient();
-  if (!client) {
-    return NextResponse.json(
-      { ok: false, message: "Supabase не настроен" },
-      { status: 503 },
-    );
-  }
-
-  const result = await recordServerTrainingSession(client, {
+  const result = await rpcRecordTrainingOnce(write.client, {
     fighterId,
     grossRub,
+    source: "demo_session",
+    sourceId: randomUUID(),
     sessionType:
-      typeof body.sessionType === "string" ? body.sessionType.slice(0, 64) : undefined,
+      typeof body.sessionType === "string" ? body.sessionType.slice(0, 64) : "training",
     createdAt,
   });
 
   if (!result.ok) {
-    return NextResponse.json({ ok: false, message: result.message }, { status: 502 });
+    return jsonError(result.message, result.status);
   }
 
-  return NextResponse.json({
+  return Response.json({
     ok: true,
-    economics: result.economics,
-    advancement: result.advancement,
+    alreadyGranted: result.alreadyGranted,
+    economics: {
+      xpAward: result.xpAwarded,
+    },
+    advancement: {
+      totalXpAfter: result.totalXpAfter,
+      levelBefore: result.levelBefore,
+      levelAfter: result.levelAfter,
+    },
     monthlyXpAfter: result.monthlyXpAfter,
   });
 }

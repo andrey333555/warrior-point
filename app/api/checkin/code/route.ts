@@ -5,34 +5,36 @@ import {
   serverTrainerCode,
 } from "@/lib/checkin-server";
 import { formatCodeDisplay } from "@/lib/verify";
-import { requireBoundUserId } from "@/lib/api-session";
+import { requireBoundUserId, isLiveEconomyLocked } from "@/lib/api-session";
+import { hashedClientKey, jsonError } from "@/lib/api-request";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
-/**
- * Trainer's rotating check-in code (server secret).
- * Only the bound trainer may fetch their code (session or demo gate).
- */
 export async function GET(req: Request) {
+  const limited = rateLimit({
+    key: `checkin-code:${hashedClientKey(req)}`,
+    limit: 30,
+    windowMs: 60_000,
+  });
+  if (!limited.ok) return jsonError("Слишком много запросов", 429);
+
   const { searchParams } = new URL(req.url);
   const trainerId = searchParams.get("trainerId")?.trim() ?? "";
 
   if (!trainerId || trainerId.length > 64) {
-    return NextResponse.json(
-      { ok: false, message: "trainerId обязателен" },
-      { status: 400 },
-    );
+    return jsonError("trainerId обязателен", 400);
   }
 
   const bound = await requireBoundUserId(trainerId);
   if (!bound.ok) {
-    return NextResponse.json(
-      { ok: false, message: bound.message },
-      { status: bound.status },
-    );
+    return jsonError(bound.message, bound.status);
   }
 
   if (!isCheckinSecretConfigured()) {
+    if (isLiveEconomyLocked()) {
+      return jsonError("Check-in не настроен (нужен CHECKIN_SECRET)", 503);
+    }
     return NextResponse.json({ ok: true, configured: false });
   }
 

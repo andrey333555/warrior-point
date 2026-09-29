@@ -6,11 +6,12 @@ import {
   updatePaymentStatus,
 } from "@/lib/payments/store";
 import { applyServerPaymentRewards } from "@/lib/payments/apply-rewards-server";
+import { isMockPaymentsAllowed } from "@/lib/api-session";
+
+export const runtime = "nodejs";
 
 export async function GET(req: Request) {
-  // Mock-pay is a demo shortcut. The moment real YooKassa credentials exist,
-  // this route must not be able to mark anything as paid.
-  if (isYooKassaConfigured()) {
+  if (isYooKassaConfigured() || !isMockPaymentsAllowed()) {
     return NextResponse.json(
       { ok: false, message: "Mock payment disabled" },
       { status: 403 },
@@ -18,9 +19,9 @@ export async function GET(req: Request) {
   }
 
   const { searchParams } = new URL(req.url);
-  const paymentId = searchParams.get("paymentId");
+  const paymentId = searchParams.get("paymentId")?.trim() ?? "";
 
-  if (!paymentId) {
+  if (!paymentId || paymentId.length > 128) {
     return NextResponse.redirect(new URL("/", req.url));
   }
 

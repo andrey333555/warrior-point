@@ -1,26 +1,30 @@
 import { NextResponse } from "next/server";
 import { createWarriorServiceClient } from "@/lib/supabase/server-admin";
-import { createWarriorBrowserClient } from "@/lib/supabase/client";
 import { isWarriorRole, resolveWarriorRole } from "@/lib/roles";
 import { canAccessAdmin } from "@/lib/api-actor";
 import { DEMO_FIGHTER_DB_ID } from "@/lib/warrior-constants";
+import { hashedClientKey, jsonError, readJsonBody, safeDbMessage } from "@/lib/api-request";
+import { rateLimit } from "@/lib/rate-limit";
 
 function client() {
-  return createWarriorServiceClient() ?? createWarriorBrowserClient();
+  return createWarriorServiceClient();
 }
 
-/** List profiles — admin/coach from session role, or WARRIOR_ADMIN_SECRET. */
 export async function GET(req: Request) {
+  const limited = rateLimit({
+    key: `admin-get:${hashedClientKey(req)}`,
+    limit: 30,
+    windowMs: 60_000,
+  });
+  if (!limited.ok) return jsonError("Слишком много запросов", 429);
+
   const url = new URL(req.url);
   const actorId = url.searchParams.get("actorId")?.trim();
   const adminSecret = req.headers.get("x-warrior-admin-secret");
 
   const gate = await canAccessAdmin({ actorId, write: false, adminSecret });
   if (!gate.ok) {
-    return NextResponse.json(
-      { ok: false, message: gate.message },
-      { status: gate.status },
-    );
+    return jsonError(gate.message, gate.status);
   }
 
   const sb = client();
@@ -41,19 +45,25 @@ export async function GET(req: Request) {
     });
   }
 
-  const { data, error } = await sb
+  let query = sb
     .from("profiles")
     .select(
-      "id, display_name, role, slug, visibility, verification_status, created_at",
+      "id, display_name, role, slug, visibility, verification_status, created_at, coach_id",
     )
     .order("created_at", { ascending: false })
     .limit(200);
 
+  if (gate.role === "coach") {
+    if (!gate.actorId) {
+      return jsonError("Нет доступа", 403);
+    }
+    query = query.eq("coach_id", gate.actorId);
+  }
+
+  const { data, error } = await query;
+
   if (error) {
-    return NextResponse.json(
-      { ok: false, message: error.message },
-      { status: 502 },
-    );
+    return jsonError(safeDbMessage(error.message), 502);
   }
 
   return NextResponse.json({
@@ -76,18 +86,16 @@ export async function GET(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  let body: { actorId?: string; profileId?: string; confirm?: boolean };
-  try {
-    body = (await req.json()) as typeof body;
-  } catch {
-    return NextResponse.json({ ok: false, message: "Invalid JSON" }, { status: 400 });
-  }
+  const parsed = await readJsonBody<{
+    actorId?: string;
+    profileId?: string;
+    confirm?: boolean;
+  }>(req);
+  if (!parsed.ok) return jsonError(parsed.message, parsed.status);
+  const body = parsed.body;
 
   if (!body.confirm || !body.profileId) {
-    return NextResponse.json(
-      { ok: false, message: "Нужны profileId и confirm: true" },
-      { status: 400 },
-    );
+    return jsonError("Нужны profileId и confirm: true", 400);
   }
 
   const adminSecret = req.headers.get("x-warrior-admin-secret");
@@ -97,19 +105,12 @@ export async function DELETE(req: Request) {
     adminSecret,
   });
   if (!gate.ok || !gate.canDelete) {
-    return NextResponse.json(
-      { ok: false, message: gate.ok ? "Только admin" : gate.message },
-      { status: gate.ok ? 403 : gate.status },
-    );
+    return jsonError(gate.ok ? "Только admin" : gate.message, gate.ok ? 403 : gate.status);
   }
 
   const sb = client();
   if (!sb) {
-    return NextResponse.json({
-      ok: true,
-      mock: true,
-      message: "Удаление stub (demo).",
-    });
+    return jsonError("Нужен SUPABASE_SERVICE_ROLE_KEY", 503);
   }
 
   const { error } = await sb
@@ -123,10 +124,7 @@ export async function DELETE(req: Request) {
     .eq("id", body.profileId);
 
   if (error) {
-    return NextResponse.json(
-      { ok: false, message: error.message },
-      { status: 502 },
-    );
+    return jsonError(safeDbMessage(error.message), 502);
   }
 
   return NextResponse.json({
@@ -136,18 +134,16 @@ export async function DELETE(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  let body: { actorId?: string; profileId?: string; role?: string };
-  try {
-    body = (await req.json()) as typeof body;
-  } catch {
-    return NextResponse.json({ ok: false, message: "Invalid JSON" }, { status: 400 });
-  }
+  const parsed = await readJsonBody<{
+    actorId?: string;
+    profileId?: string;
+    role?: string;
+  }>(req);
+  if (!parsed.ok) return jsonError(parsed.message, parsed.status);
+  const body = parsed.body;
 
   if (!body.profileId || !isWarriorRole(body.role)) {
-    return NextResponse.json(
-      { ok: false, message: "profileId и role обязательны" },
-      { status: 400 },
-    );
+    return jsonError("profileId и role обязательны", 400);
   }
 
   const adminSecret = req.headers.get("x-warrior-admin-secret");
@@ -157,21 +153,12 @@ export async function PATCH(req: Request) {
     adminSecret,
   });
   if (!gate.ok || !gate.canDelete) {
-    return NextResponse.json(
-      { ok: false, message: gate.ok ? "Только admin" : gate.message },
-      { status: gate.ok ? 403 : gate.status },
-    );
+    return jsonError(gate.ok ? "Только admin" : gate.message, gate.ok ? 403 : gate.status);
   }
 
   const sb = createWarriorServiceClient();
   if (!sb) {
-    return NextResponse.json(
-      {
-        ok: false,
-        message: "Нужен SUPABASE_SERVICE_ROLE_KEY для смены роли",
-      },
-      { status: 503 },
-    );
+    return jsonError("Нужен SUPABASE_SERVICE_ROLE_KEY для смены роли", 503);
   }
 
   const { error } = await sb
@@ -180,7 +167,7 @@ export async function PATCH(req: Request) {
     .eq("id", body.profileId);
 
   if (error) {
-    return NextResponse.json({ ok: false, message: error.message }, { status: 502 });
+    return jsonError(safeDbMessage(error.message), 502);
   }
 
   return NextResponse.json({ ok: true });
