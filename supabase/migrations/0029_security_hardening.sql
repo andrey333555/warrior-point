@@ -1,5 +1,17 @@
--- Warrior Point · Migration 0023 — Security hardening (idempotent)
+-- Warrior Point · Migration 0029 — Security hardening (idempotent)
 -- Run in: Supabase Dashboard → SQL Editor → New query → Run
+--
+-- Renumbered from origin/main's "0023_security_hardening.sql" — that number
+-- was already taken on prod by this branch's own 0023_fix_rls_lockdown.sql
+-- (applied independently, different RLS approach, see its own header). Body
+-- unchanged from origin/main except this header. Apply strictly after 0028 —
+-- relies on fighter_stats / fighter_awards / training_sessions anon-insert
+-- already being locked down, which 0023_fix_rls_lockdown.sql (not this file)
+-- did on prod. Its RLS section (part 9 below) is itself superseded by
+-- 0030_reconcile_final_lockdown.sql, which re-sweeps everything one more
+-- time to fold in gyms (0028) and this file's tighter policies together —
+-- the money-safety functions in parts 1-8 below are the part that matters
+-- long-term.
 --
 -- Closes: fake paymentId XP mint, replay training sessions, wallet races,
 -- leftover FOR ALL RLS (reviews), missing search_path, public money columns.
