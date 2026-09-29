@@ -17,10 +17,10 @@
 -- 0023_fix_rls_lockdown.sql must never be re-run in isolation.
 --
 -- 0031_profiles_public_card_fields.sql adds role/nickname/donation_goal to
--- profiles_public (the public fighter card was reading the base profiles
--- table directly, which anon has zero access to since 0023 — see the app-code
--- fix in lib/fighter-public.ts, same commit) and rewrites any avatar_url
--- still pointing at an expiring Storage signed URL to a stable public one.
+-- profiles_public (DROP + CREATE, not CREATE OR REPLACE — Postgres can't
+-- insert columns ahead of existing ones via REPLACE) and rewrites any
+-- avatar_url still pointing at an expiring Storage signed URL to a stable
+-- public one.
 --
 -- Every individual file is idempotent, so this is safe to run even if some of
 -- it already applied — re-running is a no-op.
@@ -1488,8 +1488,17 @@ NOTIFY pgrst, 'reload schema';
 --   · donation_goal  — tied to the donations feature, which is already
 --                       shown unconditionally (see publicCardViewFor()'s
 --                       showDonations: true even in minimal mode).
+--
+-- CREATE OR REPLACE VIEW can only append columns at the end — it can't
+-- insert new ones before existing ones without renumbering, so adding
+-- role/nickname/donation_goal ahead of bio here fails with "cannot change
+-- name of view column bio to role". DROP + CREATE instead (no other view
+-- or function is built on top of profiles_public — checked — so nothing
+-- else breaks); GRANT SELECT has to be reasserted after, a DROP wipes it.
 
-CREATE OR REPLACE VIEW public.profiles_public AS
+DROP VIEW IF EXISTS public.profiles_public;
+
+CREATE VIEW public.profiles_public AS
 SELECT
   id,
   display_name,
