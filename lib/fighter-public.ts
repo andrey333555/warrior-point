@@ -1,6 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { WarriorRole } from "@/lib/roles";
-import { resolveWarriorRole } from "@/lib/roles";
+import {
+  hasRole,
+  isCombatantRole,
+  primaryRole,
+  resolveWarriorRoles,
+} from "@/lib/roles";
 import {
   DEMO_FIGHTER_CLUB,
   DEMO_FIGHTER_DB_ID,
@@ -27,7 +32,9 @@ export type FighterPublicProfile = {
   slug: string;
   displayName: string;
   nickname: string | null;
+  /** Primary role (compat). Prefer `roles`. */
   role: WarriorRole;
+  roles: WarriorRole[];
   bio: string | null;
   avatarUrl: string | null;
   record: string | null;
@@ -42,6 +49,8 @@ export type FighterPublicProfile = {
   hideBio: boolean;
   hideRecord: boolean;
   verificationStatus: VerificationStatus;
+  sbpPhone: string | null;
+  sbpBank: string | null;
 };
 
 export type PublicCardView = {
@@ -50,7 +59,11 @@ export type PublicCardView = {
   showClub: boolean;
   showBio: boolean;
   showRecord: boolean;
+  /** Fighter/athlete card meta block */
+  showFighterCard: boolean;
+  /** Coach booking CTA (caller also gates on real trainings in DB) */
   showBooking: boolean;
+  /** Donate / tips — one control for fighter+coach */
   showDonations: boolean;
 };
 
@@ -72,11 +85,23 @@ export function isVerificationStatus(v: unknown): v is VerificationStatus {
 export function resolvePublicCardView(
   profile: FighterPublicProfile,
   viewerRole: WarriorRole | null,
+  viewerRoles?: readonly WarriorRole[] | null,
 ): PublicCardView {
-  const privileged = viewerRole === "admin" || viewerRole === "coach";
+  const viewerList =
+    viewerRoles && viewerRoles.length > 0
+      ? viewerRoles
+      : viewerRole
+        ? [viewerRole]
+        : [];
+  const privileged =
+    hasRole(viewerList, "admin") || hasRole(viewerList, "coach");
   const fullAccess =
     profile.visibility === "public" ||
     (profile.visibility === "limited" && privileged);
+
+  const combatant = isCombatantRole(profile.roles);
+  const coach = hasRole(profile.roles, "coach");
+  const showDonations = combatant || coach;
 
   if (!fullAccess) {
     return {
@@ -85,19 +110,21 @@ export function resolvePublicCardView(
       showClub: false,
       showBio: false,
       showRecord: false,
+      showFighterCard: false,
       showBooking: false,
-      showDonations: true,
+      showDonations,
     };
   }
 
   return {
     mode: "full",
-    showWeightClass: !profile.hideWeightClass,
-    showClub: !profile.hideClub,
-    showBio: !profile.hideBio,
-    showRecord: !profile.hideRecord,
-    showBooking: profile.bookingEnabled,
-    showDonations: true,
+    showWeightClass: combatant && !profile.hideWeightClass,
+    showClub: combatant && !profile.hideClub,
+    showBio: combatant && !profile.hideBio,
+    showRecord: combatant && !profile.hideRecord,
+    showFighterCard: combatant,
+    showBooking: coach && profile.bookingEnabled,
+    showDonations,
   };
 }
 
@@ -121,10 +148,12 @@ function parseNickname(v: unknown): string | null {
   return t.slice(0, NICKNAME_MAX_LEN);
 }
 
-const PROFILE_SELECT_BASE = [
+/** Columns on profiles_public — no phones/SBP/balances (see migration 0034/0035). */
+const PROFILE_SELECT = [
   "id",
   "display_name",
   "role",
+  "roles",
   "slug",
   "bio",
   "avatar_url",
@@ -143,16 +172,10 @@ const PROFILE_SELECT_BASE = [
   "donation_goal",
 ] as const;
 
+/** No invented public fields — only what the DB already has. */
 function applyKnownCardDefaults(
   profile: FighterPublicProfile,
 ): FighterPublicProfile {
-  if (profile.slug === "romanov") {
-    return {
-      ...profile,
-      nickname: profile.nickname ?? "Уличный Боец",
-      donationGoal: profile.donationGoal ?? "Сборы в Краснодар",
-    };
-  }
   return profile;
 }
 
@@ -160,6 +183,8 @@ function mapRow(row: Record<string, unknown>): FighterPublicProfile | null {
   const id = typeof row.id === "string" ? row.id : null;
   const slug = typeof row.slug === "string" ? row.slug : null;
   if (!id || !slug) return null;
+
+  const roles = resolveWarriorRoles(row.roles, row.role);
 
   return {
     id,
@@ -169,7 +194,8 @@ function mapRow(row: Record<string, unknown>): FighterPublicProfile | null {
         ? row.display_name
         : "Боец",
     nickname: parseNickname(row.nickname),
-    role: resolveWarriorRole(row.role),
+    role: primaryRole(roles),
+    roles,
     bio: typeof row.bio === "string" ? row.bio : null,
     avatarUrl: typeof row.avatar_url === "string" ? row.avatar_url : null,
     record: typeof row.record === "string" ? row.record : null,
@@ -189,15 +215,19 @@ function mapRow(row: Record<string, unknown>): FighterPublicProfile | null {
     verificationStatus: isVerificationStatus(row.verification_status)
       ? row.verification_status
       : "none",
+    // SBP lives on base profiles only — never on profiles_public.
+    sbpPhone: null,
+    sbpBank: null,
   };
 }
 
 const ROMANOV_DEMO: FighterPublicProfile = {
-  id: "WP-COACH-001",
+  id: "WP-FIGHTER-3b388bca-7b8c-4d45-af82-f19c5740ae9c",
   slug: "romanov",
   displayName: "Сергей Романов",
   nickname: "Уличный Боец",
   role: "coach",
+  roles: ["coach", "fighter"],
   bio: "MMA cage prep · sparring · fight camp.",
   avatarUrl:
     "https://images.unsplash.com/photo-1581009137042-c552e485697a?w=900&q=80",
@@ -213,6 +243,8 @@ const ROMANOV_DEMO: FighterPublicProfile = {
   hideBio: false,
   hideRecord: false,
   verificationStatus: "none",
+  sbpPhone: null,
+  sbpBank: null,
 };
 
 /** Demo fallback when Supabase has no row / migrations not applied. */
@@ -227,6 +259,7 @@ export function getDemoFighterBySlug(
     displayName: "King León",
     nickname: null,
     role: "fighter",
+    roles: ["fighter"],
     bio: "Демо-боец платформы Round 23. Промоушены: ACA, RCC, M-1 Global. Базовый зал — БК «Кузня».",
     avatarUrl: DEMO_FIGHTER_PORTRAIT,
     record: "27-4-1",
@@ -241,6 +274,8 @@ export function getDemoFighterBySlug(
     hideBio: false,
     hideRecord: false,
     verificationStatus: "none",
+    sbpPhone: null,
+    sbpBank: null,
   };
 }
 
@@ -274,14 +309,10 @@ export function redactFighterForAnonymous(
  * Reads through `public.profiles_public` — a view that never exposes
  * balance/coach_earnings/iphone_tickets/coach_id and masks
  * bio/record/club/weight_class per the same visibility/hide_* rules
- * `redactFighterForAnonymous` applies (see migration
- * 0031_profiles_public_card_fields.sql). Never queries the base `profiles`
+ * `redactFighterForAnonymous` applies. Never queries the base `profiles`
  * table directly — anon has zero grants on it since the RLS lockdown.
  *
- * On a genuine read failure (`error` truthy — permission/network/etc, not
- * "no such slug") this THROWS instead of silently returning demo data for
- * an unrelated fighter. Callers must handle that distinctly from a null
- * return (= no profile with this slug, a real 404).
+ * On a genuine read failure this THROWS. Null = no profile with this slug.
  */
 export async function fetchFighterBySlug(
   client: SupabaseClient,
@@ -290,40 +321,39 @@ export async function fetchFighterBySlug(
   const normalized = slug.trim().toLowerCase();
   if (!normalized) return null;
 
-  const { data, error } = await client
+  // Prefer roles column; fall back if migration 0035 not applied yet.
+  const full = await client
     .from("profiles_public")
-    .select(PROFILE_SELECT_BASE.join(", "))
+    .select(PROFILE_SELECT.join(", "))
     .eq("slug", normalized)
     .maybeSingle();
 
-  if (error) {
-    throw new Error(`fetchFighterBySlug(${normalized}): ${error.message}`);
+  let data: Record<string, unknown> | null = null;
+
+  if (
+    full.error &&
+    /column .*roles.* does not exist/i.test(full.error.message ?? "")
+  ) {
+    const legacySelect = PROFILE_SELECT.filter((c) => c !== "roles").join(", ");
+    const legacy = await client
+      .from("profiles_public")
+      .select(legacySelect)
+      .eq("slug", normalized)
+      .maybeSingle();
+    if (legacy.error) {
+      throw new Error(`fetchFighterBySlug(${normalized}): ${legacy.error.message}`);
+    }
+    data = (legacy.data as Record<string, unknown> | null) ?? null;
+  } else if (full.error) {
+    throw new Error(`fetchFighterBySlug(${normalized}): ${full.error.message}`);
+  } else {
+    data = (full.data as Record<string, unknown> | null) ?? null;
   }
+
   if (!data || typeof data !== "object") return null;
 
-  const mapped = mapRow(data as Record<string, unknown>);
+  const mapped = mapRow(data);
   if (!mapped) return null;
-
-  // King is the marketing showcase profile — curated demo defaults fill any
-  // gap intentionally, visitors know it's a demo. Not applied to any other
-  // fighter: a real profile's missing field should just be missing, not
-  // quietly replaced by someone else's data.
-  if (normalized === "king" || mapped.id === DEMO_FIGHTER_DB_ID) {
-    const demo = getDemoFighterBySlug("king")!;
-    return {
-      ...mapped,
-      slug: mapped.slug || "king",
-      bio: mapped.bio ?? demo.bio,
-      record: mapped.record ?? demo.record,
-      avatarUrl: mapped.avatarUrl ?? demo.avatarUrl,
-      club: mapped.club ?? demo.club,
-      weightClass: mapped.weightClass ?? demo.weightClass,
-      displayName:
-        mapped.displayName === "Боец" || !mapped.displayName.trim()
-          ? demo.displayName
-          : mapped.displayName,
-    };
-  }
 
   return applyKnownCardDefaults(mapped);
 }

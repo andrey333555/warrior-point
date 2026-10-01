@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { donateSettlement } from "@/lib/economy";
+import {
+  campaignToFundraiser,
+  fetchActiveCampaign,
+} from "@/lib/fundraising-campaign";
 import { isGuestDonorId } from "@/lib/guest-donor";
 
 export type DonationRow = {
@@ -14,9 +18,12 @@ export type DonationRow = {
 
 export type FundraiserProgress = {
   title: string;
+  description: string | null;
   goalRub: number;
   raisedRub: number;
   pct: number;
+  deadline: string | null;
+  commissionPercent: number;
 };
 
 export type DonateResult =
@@ -129,54 +136,18 @@ async function grantDonationXpOnce(
   }
 }
 
-/** Pull fundraiser goal + raised sum for a fighter passport. */
+/**
+ * Active fundraising campaign for a fighter.
+ * Source of truth: `public.campaigns` (anon SELECT via RLS).
+ * Returns null when there is no active row — callers must not invent one.
+ */
 export async function fetchFundraiserProgress(
   client: SupabaseClient,
   recipientId: string,
-  fallback?: { title: string; goalRub: number },
-): Promise<FundraiserProgress> {
-  const title =
-    fallback?.title ?? "На сборы в Дагестан";
-  const goalRub = fallback?.goalRub ?? 50_000;
-
-  let resolvedTitle = title;
-  let resolvedGoal = goalRub;
-
-  const { data: statsRow } = await client
-    .from("fighter_stats")
-    .select("fundraiser_title, fundraiser_goal_rub")
-    .eq("fighter_id", recipientId)
-    .maybeSingle();
-
-  if (statsRow) {
-    if (typeof statsRow.fundraiser_title === "string" && statsRow.fundraiser_title) {
-      resolvedTitle = statsRow.fundraiser_title;
-    }
-    const g = num(statsRow.fundraiser_goal_rub);
-    if (g > 0) resolvedGoal = g;
-  }
-
-  const { data: donationRows } = await client
-    .from("donations_public")
-    .select("net_amount")
-    .eq("recipient_id", recipientId);
-
-  const raisedRub = (donationRows ?? []).reduce(
-    (sum, row) => sum + num(row.net_amount),
-    0,
-  );
-
-  const pct =
-    resolvedGoal > 0
-      ? Math.min(100, Math.round((raisedRub / resolvedGoal) * 100))
-      : 0;
-
-  return {
-    title: resolvedTitle,
-    goalRub: resolvedGoal,
-    raisedRub,
-    pct,
-  };
+): Promise<FundraiserProgress | null> {
+  const campaign = await fetchActiveCampaign(client, recipientId);
+  if (!campaign) return null;
+  return campaignToFundraiser(campaign);
 }
 
 /** Recent donations for the fighter activity feed. */

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -9,87 +9,100 @@ import {
 } from "@/lib/fighter-public";
 import type { WarriorRole } from "@/lib/roles";
 import { DonateModal } from "@/components/donate-modal";
-import { submitFighterDonation } from "@/lib/donations-flow";
-import { useWarriorAuth } from "@/hooks/use-warrior-auth";
+import FundraisingProgress, {
+  type FundraisingRecentDonation,
+} from "@/components/FundraisingProgress";
 import { resolveBookingHref } from "@/lib/fighter-booking";
+import { createWarriorBrowserClient } from "@/lib/supabase/client";
+import {
+  fetchDonationFeed,
+  fetchFundraiserProgress,
+  type FundraiserProgress,
+} from "@/lib/supabase/donations";
+import { localFundraiserProgress } from "@/lib/donations-store";
+import {
+  daysLeftFromDeadline,
+  formatDonationTimeAgo,
+  tipOnlyFundraiserProgress,
+} from "@/lib/fundraising-campaign";
+import { fighterHasBookableSplits } from "@/lib/supabase/splits-sync";
 
 type Props = {
   profile: FighterPublicProfile;
   viewerRole: WarriorRole | null;
+  viewerRoles?: WarriorRole[] | null;
+  commissionUiEnabled?: boolean;
 };
 
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
-  return `${parts[0]![0] ?? ""}${parts[1]![0] ?? ""}`.toUpperCase();
-}
-
-export default function FighterPublicPage({ profile, viewerRole }: Props) {
+export default function FighterPublicPage({
+  profile,
+  viewerRole,
+  viewerRoles = null,
+  commissionUiEnabled = false,
+}: Props) {
   const router = useRouter();
-  const auth = useWarriorAuth();
   const view = useMemo(
-    () => resolvePublicCardView(profile, viewerRole),
-    [profile, viewerRole],
+    () => resolvePublicCardView(profile, viewerRole, viewerRoles),
+    [profile, viewerRole, viewerRoles],
   );
 
   const [donateOpen, setDonateOpen] = useState(false);
-  const [donateBusy, setDonateBusy] = useState(false);
-  const [donateError, setDonateError] = useState<string | null>(null);
-
-  const viewerId =
-    auth.status === "authenticated" ? auth.user.id : undefined;
-
-  const onDonate = useCallback(
-    async (amount: number, comment: string) => {
-      setDonateBusy(true);
-      setDonateError(null);
-      try {
-        const result = await submitFighterDonation({
-          recipientId: profile.id,
-          grossRub: amount,
-          comment,
-          viewerId,
-          fundraiserFallback: {
-            title: profile.donationGoal ?? "Поддержка бойца",
-            goalRub: 50000,
-            raisedRub: Math.round(profile.donationsTotalKop / 100),
-            pct: Math.min(
-              100,
-              Math.round((profile.donationsTotalKop / 100 / 50000) * 100),
-            ),
-          },
-        });
-        if (!result.ok) {
-          setDonateError(result.message);
-          return null;
-        }
-        return {
-          grossRub: result.grossRub,
-          netRub: result.netRub,
-          newDonorBalance: result.newDonorBalance,
-          donationId: result.donationId,
-          source: result.source,
-        };
-      } catch (err) {
-        setDonateError(
-          err instanceof Error ? err.message : "Не удалось отправить донат",
-        );
-        return null;
-      } finally {
-        setDonateBusy(false);
-      }
-    },
-    [viewerId, profile.id, profile.donationsTotalKop, profile.donationGoal],
+  const [donatePreset, setDonatePreset] = useState<number | undefined>();
+  const [hasCampaign, setHasCampaign] = useState(false);
+  const [hasTrainings, setHasTrainings] = useState(false);
+  const [fundraiser, setFundraiser] = useState<FundraiserProgress>(() =>
+    tipOnlyFundraiserProgress(),
   );
+  const [recentDonations, setRecentDonations] = useState<
+    FundraisingRecentDonation[]
+  >([]);
 
-  const raisedRub = Math.round(profile.donationsTotalKop / 100);
-  const fundraiser = {
-    title: profile.donationGoal ?? "Поддержка бойца",
-    goalRub: 50000,
-    raisedRub,
-    pct: Math.min(100, Math.round((raisedRub / 50000) * 100)),
-  };
+  useEffect(() => {
+    const client = createWarriorBrowserClient();
+    if (!client) {
+      setHasCampaign(false);
+      setHasTrainings(false);
+      setFundraiser(tipOnlyFundraiserProgress());
+      setRecentDonations([]);
+      return;
+    }
+
+    void fetchFundraiserProgress(client, profile.id).then((remote) => {
+      const merged = localFundraiserProgress(profile.id, remote);
+      if (merged) {
+        setHasCampaign(true);
+        setFundraiser(merged);
+      } else {
+        setHasCampaign(false);
+        setFundraiser(tipOnlyFundraiserProgress());
+      }
+    });
+
+    void fetchDonationFeed(client, profile.id, 3).then((rows) => {
+      setRecentDonations(
+        rows.map((row) => {
+          const name = row.donorName?.trim() || "";
+          const isAnonymous = !name || name === "Гость" || name === "Аноним";
+          return {
+            name: isAnonymous ? "Аноним" : name,
+            amount: row.netAmount > 0 ? row.netAmount : row.grossAmount,
+            isAnonymous,
+            timeAgo: formatDonationTimeAgo(row.createdAt),
+          };
+        }),
+      );
+    });
+
+    void fighterHasBookableSplits(client, profile.id).then(setHasTrainings);
+  }, [profile.id]);
+
+  const openDonate = useCallback((amount: number) => {
+    setDonatePreset(amount > 0 ? amount : undefined);
+    setDonateOpen(true);
+  }, []);
+
+  // Coach booking only when role includes coach AND real trainings exist.
+  const showBooking = view.showBooking && hasTrainings;
 
   return (
     <div
@@ -112,15 +125,15 @@ export default function FighterPublicPage({ profile, viewerRole }: Props) {
       </header>
 
       <div className="mb-5 flex items-center gap-4">
-        <div
-          className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl border border-white/15 bg-zinc-900"
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={profile.avatarUrl || "/fighters/king-ufc-portrait.png"}
-            alt={profile.displayName}
-            className="h-full w-full object-cover"
-          />
+        <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl border border-white/15 bg-zinc-900">
+          {profile.avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={profile.avatarUrl}
+              alt={profile.displayName}
+              className="h-full w-full object-cover"
+            />
+          ) : null}
         </div>
         <div className="min-w-0">
           <h1 className="truncate text-2xl font-bold">{profile.displayName}</h1>
@@ -138,7 +151,39 @@ export default function FighterPublicPage({ profile, viewerRole }: Props) {
         </div>
       </div>
 
-      {view.mode === "full" ? (
+      {/* One donate/tips control for fighter, athlete, and coach */}
+      {view.showDonations ? (
+        <div className="mb-4">
+          <FundraisingProgress
+            title={fundraiser.title}
+            description={fundraiser.description}
+            goal={fundraiser.goalRub}
+            raised={fundraiser.raisedRub}
+            hasCampaign={hasCampaign}
+            daysLeft={daysLeftFromDeadline(fundraiser.deadline)}
+            recentDonations={recentDonations}
+            donationsEnabled={commissionUiEnabled}
+            onSupport={openDonate}
+          />
+        </div>
+      ) : null}
+
+      {showBooking ? (
+        <Link
+          href={resolveBookingHref(profile.slug)}
+          className="mb-3 flex w-full items-center justify-between rounded-2xl border border-white/15 bg-white/[0.04] px-4 py-4 text-left"
+        >
+          <div>
+            <p className="text-base font-semibold text-white/90">
+              Записаться на тренировку
+            </p>
+            <p className="text-xs text-white/40">Календарь и сплиты</p>
+          </div>
+          <span className="text-xl text-white/40">→</span>
+        </Link>
+      ) : null}
+
+      {view.showFighterCard && view.mode === "full" ? (
         <div className="mb-5 space-y-3">
           {view.showRecord && profile.record ? (
             <MetaRow label="Рекорд" value={profile.record} />
@@ -157,54 +202,22 @@ export default function FighterPublicPage({ profile, viewerRole }: Props) {
         </div>
       ) : null}
 
-      {view.showBooking ? (
-        <Link
-          href={resolveBookingHref(profile.slug)}
-          className="mb-3 flex w-full items-center justify-between rounded-2xl px-4 py-4 text-left"
-          style={{ background: "rgba(201,168,76,0.9)", color: "#0A0A0A" }}
-        >
-          <div>
-            <p className="text-base font-extrabold">Записаться на тренировку</p>
-            <p className="text-xs opacity-70">Календарь и сплиты</p>
-          </div>
-          <span className="text-xl">→</span>
-        </Link>
-      ) : (
-        <p className="mb-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs text-white/40">
-          Запись на тренировки временно отключена бойцом
-        </p>
-      )}
-
-      {view.showDonations ? (
-        <div className="mb-4">
-          <button
-            type="button"
-            onClick={() => setDonateOpen(true)}
-            className="w-full rounded-2xl border border-[#C9A84C]/40 bg-[#C9A84C]/10 px-4 py-4 text-left"
-          >
-            <p className="text-base font-bold text-[#C9A84C]">Поддержать бойца</p>
-            <p className="mt-0.5 text-xs text-white/45">
-              Донат доступен всегда · собрано {raisedRub.toLocaleString("ru-RU")} ₽
-            </p>
-          </button>
-          {profile.donationGoal ? (
-            <p className="mt-2 px-1 text-sm font-medium text-white/85">
-              {profile.donationGoal}
-            </p>
-          ) : null}
-        </div>
+      {commissionUiEnabled ? (
+        <DonateModal
+          open={donateOpen}
+          onClose={() => {
+            setDonateOpen(false);
+            setDonatePreset(undefined);
+          }}
+          fighterName={profile.displayName}
+          avatarUrl={profile.avatarUrl}
+          sbpPhone={profile.sbpPhone}
+          sbpBank={profile.sbpBank}
+          fundraiser={fundraiser}
+          commissionUiEnabled={commissionUiEnabled}
+          initialAmount={donatePreset}
+        />
       ) : null}
-
-      <DonateModal
-        open={donateOpen}
-        onClose={() => setDonateOpen(false)}
-        fighterName={profile.displayName}
-        fighterInitials={initials(profile.displayName)}
-        fundraiser={fundraiser}
-        onDonate={onDonate}
-        busy={donateBusy}
-        error={donateError}
-      />
     </div>
   );
 }

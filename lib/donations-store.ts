@@ -24,10 +24,16 @@ export function appendLocalDonation(record: LocalDonationRecord): void {
   saveData(KEY, [record, ...all].slice(0, 200));
 }
 
+/**
+ * Merge local demo donations into campaign raised.
+ * If there is no campaign (`fallback` null), stays null — do not invent one.
+ */
 export function localFundraiserProgress(
   recipientId: string,
-  fallback: FundraiserProgress,
-): FundraiserProgress {
+  fallback: FundraiserProgress | null,
+): FundraiserProgress | null {
+  if (!fallback) return null;
+
   const raisedExtra = loadLocalDonations()
     .filter((d) => d.recipientId === recipientId)
     .reduce((sum, d) => sum + d.netRub, 0);

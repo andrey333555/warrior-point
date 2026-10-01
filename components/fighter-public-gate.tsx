@@ -4,28 +4,36 @@ import { useEffect, useState } from "react";
 import FighterPublicPage from "@/components/fighter-public-page";
 import type { FighterPublicProfile } from "@/lib/fighter-public";
 import type { WarriorRole } from "@/lib/roles";
+import { hasAnyRole } from "@/lib/roles";
 import { useWarriorAuth } from "@/hooks/use-warrior-auth";
 import { fetchOwnProfileMe } from "@/lib/profile-me-api";
 
 export default function FighterPublicGate({
   profile: initial,
   slug,
+  commissionUiEnabled = false,
 }: {
   profile: FighterPublicProfile;
   slug: string;
+  /** From server PAYMENTS_PROVIDER — no secrets, boolean only */
+  commissionUiEnabled?: boolean;
 }) {
   const auth = useWarriorAuth();
   const [viewerRole, setViewerRole] = useState<WarriorRole | null>(null);
+  const [viewerRoles, setViewerRoles] = useState<WarriorRole[] | null>(null);
   const [profile, setProfile] = useState(initial);
 
   useEffect(() => {
     if (auth.status !== "authenticated") {
       setViewerRole(null);
+      setViewerRoles(null);
       return;
     }
     let cancelled = false;
     void fetchOwnProfileMe(auth.user.id).then((own) => {
-      if (!cancelled) setViewerRole(own?.role ?? "fighter");
+      if (cancelled) return;
+      setViewerRole(own?.role ?? "fighter");
+      setViewerRoles(own?.roles ?? ["fighter"]);
     });
     return () => {
       cancelled = true;
@@ -34,7 +42,7 @@ export default function FighterPublicGate({
 
   // Privileged viewers re-fetch full card (SSR shipped redacted payload).
   useEffect(() => {
-    if (viewerRole !== "admin" && viewerRole !== "coach") return;
+    if (!hasAnyRole(viewerRoles ?? viewerRole, ["admin", "coach"])) return;
     if (auth.status !== "authenticated") return;
     let cancelled = false;
     void fetch(
@@ -50,7 +58,14 @@ export default function FighterPublicGate({
     return () => {
       cancelled = true;
     };
-  }, [viewerRole, auth, slug]);
+  }, [viewerRole, viewerRoles, auth, slug]);
 
-  return <FighterPublicPage profile={profile} viewerRole={viewerRole} />;
+  return (
+    <FighterPublicPage
+      profile={profile}
+      viewerRole={viewerRole}
+      viewerRoles={viewerRoles}
+      commissionUiEnabled={commissionUiEnabled}
+    />
+  );
 }
